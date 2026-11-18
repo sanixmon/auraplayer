@@ -98,6 +98,7 @@ fun AuraAppRoot(
     val visualizerFrame by appContainer.visualizerBus.frames.collectAsStateWithLifecycle()
     val visualizerConfig by appContainer.visualizerPreferences.configFlow
         .collectAsStateWithLifecycle(initialValue = VisualizerConfig())
+    appContainer.visualizerBus.targetBandCount = visualizerConfig.density.bandCount
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val useNavRail = widthSizeClass != WindowWidthSizeClass.Compact
@@ -336,6 +337,7 @@ fun AuraAppRoot(
                         NowPlayingScreen(
                             viewModel = nowPlayingVm,
                             onBack = { collapsePlayer() },
+                            isPlayerExpanded = expandProgress > 0.95f,
                             onDragCollapseDelta = { dy ->
                                 scope.launch {
                                     val deltaProgress = -dy / collapsedTopPx.coerceAtLeast(1f)

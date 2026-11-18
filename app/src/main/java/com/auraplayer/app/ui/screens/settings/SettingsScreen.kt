@@ -2,7 +2,6 @@ package com.auraplayer.app.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,12 +26,17 @@ import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -55,11 +59,15 @@ import com.auraplayer.app.data.model.AppAccentPreset
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerDensity
+import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.ui.components.CoverArtView
 import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.VisualizerCanvas
+import com.auraplayer.app.ui.components.toPalette
+import com.auraplayer.app.ui.theme.AccentColors
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private enum class ColorPickerTarget {
     APP_COLOR,
@@ -78,6 +86,11 @@ fun SettingsScreen(
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
 
     var activeColorPicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
+
+    val dynamicAccent = AccentColors(
+        primary = MaterialTheme.colorScheme.primary,
+        secondary = MaterialTheme.colorScheme.secondary
+    )
 
     Scaffold(
         modifier = modifier,
@@ -122,6 +135,7 @@ fun SettingsScreen(
                         demoWhenIdle = true,
                         centerRingRadiusRatio = 0.25f,
                         centerRingRadiusDp = 58.dp,
+                        visualizerBus = viewModel.visualizerBus,
                         modifier = Modifier.fillMaxSize()
                     )
                     CoverArtView(
@@ -143,7 +157,7 @@ fun SettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // App Color + Cover Style
+                // App Color & Cover Art Dropdowns
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -154,91 +168,23 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("App Color", style = MaterialTheme.typography.titleMedium)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilterChip(
-                                selected = config.accentMode == AppAccentMode.DYNAMIC_ALBUM,
-                                onClick = { viewModel.setAccentMode(AppAccentMode.DYNAMIC_ALBUM) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.AutoAwesome,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                label = { Text("Dynamic") }
-                            )
+                        AppColorDropdown(
+                            accentMode = config.accentMode,
+                            customPrimaryArgb = config.customAppPrimaryArgb,
+                            customSecondaryArgb = config.customAppSecondaryArgb,
+                            onSelectDynamic = { viewModel.setAccentMode(AppAccentMode.DYNAMIC_ALBUM) },
+                            onSelectPreset = viewModel::setAccentPreset,
+                            onOpenCustomPicker = { activeColorPicker = ColorPickerTarget.APP_COLOR }
+                        )
 
-                            FilterChip(
-                                selected = config.accentMode == AppAccentMode.CUSTOM,
-                                onClick = { activeColorPicker = ColorPickerTarget.APP_COLOR },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Colorize,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                label = { Text("Custom") }
-                            )
-
-                            AppAccentPreset.entries.forEach { preset ->
-                                val isSelected = config.accentMode == AppAccentMode.CUSTOM &&
-                                    config.customAppPrimaryArgb == preset.primaryHex &&
-                                    config.customAppSecondaryArgb == preset.secondaryHex
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterVertically)
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            Brush.linearGradient(
-                                                listOf(
-                                                    Color(preset.primaryHex),
-                                                    Color(preset.secondaryHex)
-                                                )
-                                            )
-                                        )
-                                        .then(
-                                            if (isSelected) {
-                                                Modifier.border(2.dp, Color.White, CircleShape)
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                        .clickable { viewModel.setAccentPreset(preset) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = preset.displayName,
-                                            tint = Color.Black,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        HorizontalDivider()
-
-                        Text("Cover Art", style = MaterialTheme.typography.titleMedium)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            CoverArtStyle.entries.forEach { style ->
-                                FilterChip(
-                                    selected = config.coverArtStyle == style,
-                                    onClick = { viewModel.setCoverArtStyle(style) },
-                                    label = { Text(style.displayName) }
-                                )
-                            }
-                        }
+                        OptionDropdown(
+                            label = "Cover Art",
+                            selectedText = config.coverArtStyle.displayName,
+                            options = CoverArtStyle.entries,
+                            optionLabel = { it.displayName },
+                            selectedOption = config.coverArtStyle,
+                            onOptionSelected = viewModel::setCoverArtStyle
+                        )
                     }
                 }
 
@@ -253,68 +199,58 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Visualizer", style = MaterialTheme.typography.titleMedium)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            VisualizerStyle.entries.forEach { style ->
-                                FilterChip(
-                                    selected = config.style == style,
-                                    onClick = { viewModel.setStyle(style) },
-                                    label = { Text(style.displayName) }
-                                )
-                            }
+                            OptionDropdown(
+                                label = "Visualizer",
+                                selectedText = config.style.displayName,
+                                options = VisualizerStyle.entries,
+                                optionLabel = { it.displayName },
+                                selectedOption = config.style,
+                                onOptionSelected = viewModel::setStyle,
+                                modifier = Modifier.weight(1.2f)
+                            )
+
+                            OptionDropdown(
+                                label = "Fill",
+                                selectedText = config.fillMode.displayName,
+                                options = VisualizerFillMode.entries,
+                                optionLabel = { it.displayName },
+                                selectedOption = config.fillMode,
+                                onOptionSelected = viewModel::setFillMode,
+                                modifier = Modifier.weight(0.8f)
+                            )
                         }
 
-                        Text("Colors", style = MaterialTheme.typography.titleMedium)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            VisualizerColorScheme.entries.forEach { scheme ->
-                                FilterChip(
-                                    selected = config.colorScheme == scheme,
-                                    onClick = {
-                                        if (scheme == VisualizerColorScheme.CUSTOM) {
-                                            activeColorPicker = ColorPickerTarget.VISUALIZER_COLOR
-                                        } else {
-                                            viewModel.setColorScheme(scheme)
-                                        }
-                                    },
-                                    leadingIcon = if (scheme == VisualizerColorScheme.CUSTOM) {
-                                        {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(14.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        Brush.linearGradient(
-                                                            listOf(
-                                                                Color(config.customVizPrimaryArgb),
-                                                                Color(config.customVizSecondaryArgb)
-                                                            )
-                                                        )
-                                                    )
-                                            )
-                                        }
+                            VisualizerColorDropdown(
+                                colorScheme = config.colorScheme,
+                                config = config,
+                                dynamicAccent = dynamicAccent,
+                                onSelectScheme = { scheme ->
+                                    if (scheme == VisualizerColorScheme.CUSTOM) {
+                                        activeColorPicker = ColorPickerTarget.VISUALIZER_COLOR
                                     } else {
-                                        null
-                                    },
-                                    label = { Text(scheme.displayName) }
-                                )
-                            }
-                        }
+                                        viewModel.setColorScheme(scheme)
+                                    }
+                                },
+                                modifier = Modifier.weight(1.2f)
+                            )
 
-                        Text("Bars", style = MaterialTheme.typography.titleMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            VisualizerDensity.entries.forEach { density ->
-                                FilterChip(
-                                    selected = config.density == density,
-                                    onClick = { viewModel.setDensity(density) },
-                                    label = { Text(density.displayName) }
-                                )
-                            }
+                            OptionDropdown(
+                                label = "Bars",
+                                selectedText = "${config.density.displayName} bands",
+                                options = VisualizerDensity.entries,
+                                optionLabel = { "${it.displayName} bands" },
+                                selectedOption = config.density,
+                                onOptionSelected = viewModel::setDensity,
+                                modifier = Modifier.weight(0.8f)
+                            )
                         }
 
                         HorizontalDivider()
@@ -357,6 +293,17 @@ fun SettingsScreen(
                             value = config.rotationSpeed,
                             range = 0f..2.5f,
                             onValueChange = viewModel::setRotationSpeed
+                        )
+
+                        SettingSlider(
+                            label = "Audio Sync",
+                            valueText = if (config.syncOffsetMs == 0) "0 ms" else "${config.syncOffsetMs} ms",
+                            value = config.syncOffsetMs.toFloat(),
+                            range = 0f..350f,
+                            onValueChange = { raw ->
+                                val snapped = ((raw / 5f).roundToInt() * 5).coerceIn(0, 350)
+                                viewModel.setSyncOffsetMs(snapped)
+                            }
                         )
 
                         HorizontalDivider()
@@ -422,6 +369,302 @@ fun SettingsScreen(
         }
         null -> Unit
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> OptionDropdown(
+    label: String,
+    selectedText: String,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    selectedOption: T,
+    onOptionSelected: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selectedText,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                val isSelected = option == selectedOption
+                DropdownMenuItem(
+                    text = { Text(optionLabel(option)) },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        onOptionSelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppColorDropdown(
+    accentMode: AppAccentMode,
+    customPrimaryArgb: Long,
+    customSecondaryArgb: Long,
+    onSelectDynamic: () -> Unit,
+    onSelectPreset: (AppAccentPreset) -> Unit,
+    onOpenCustomPicker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val matchingPreset = if (accentMode == AppAccentMode.CUSTOM) {
+        AppAccentPreset.entries.firstOrNull {
+            it.primaryHex == customPrimaryArgb && it.secondaryHex == customSecondaryArgb
+        }
+    } else {
+        null
+    }
+
+    val currentText = when {
+        accentMode == AppAccentMode.DYNAMIC_ALBUM -> "Dynamic (Album)"
+        matchingPreset != null -> matchingPreset.displayName
+        else -> "Custom"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = currentText,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("App Color") },
+            leadingIcon = {
+                if (accentMode == AppAccentMode.DYNAMIC_ALBUM) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    ColorGradientDot(
+                        start = Color(customPrimaryArgb),
+                        end = Color(customSecondaryArgb)
+                    )
+                }
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Dynamic (Album)") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                trailingIcon = if (accentMode == AppAccentMode.DYNAMIC_ALBUM) {
+                    {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    null
+                },
+                onClick = {
+                    onSelectDynamic()
+                    expanded = false
+                }
+            )
+
+            DropdownMenuItem(
+                text = { Text("Custom Wheel / Hex...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Colorize,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                trailingIcon = if (accentMode == AppAccentMode.CUSTOM && matchingPreset == null) {
+                    {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    null
+                },
+                onClick = {
+                    expanded = false
+                    onOpenCustomPicker()
+                }
+            )
+
+            HorizontalDivider()
+
+            AppAccentPreset.entries.forEach { preset ->
+                val isSelected = matchingPreset == preset
+                DropdownMenuItem(
+                    text = { Text(preset.displayName) },
+                    leadingIcon = {
+                        ColorGradientDot(
+                            start = Color(preset.primaryHex),
+                            end = Color(preset.secondaryHex)
+                        )
+                    },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        onSelectPreset(preset)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VisualizerColorDropdown(
+    colorScheme: VisualizerColorScheme,
+    config: com.auraplayer.app.data.model.VisualizerConfig,
+    dynamicAccent: AccentColors,
+    onSelectScheme: (VisualizerColorScheme) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val activePalette = colorScheme.toPalette(config = config, dynamicAccent = dynamicAccent)
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = colorScheme.displayName,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Colors") },
+            leadingIcon = {
+                ColorGradientDot(start = activePalette.start, end = activePalette.end)
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            VisualizerColorScheme.entries.forEach { scheme ->
+                val palette = scheme.toPalette(config = config, dynamicAccent = dynamicAccent)
+                val isSelected = scheme == colorScheme
+                val label = if (scheme == VisualizerColorScheme.CUSTOM) {
+                    "Custom Wheel / Hex..."
+                } else {
+                    scheme.displayName
+                }
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    leadingIcon = {
+                        ColorGradientDot(start = palette.start, end = palette.end)
+                    },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelectScheme(scheme)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorGradientDot(
+    start: Color,
+    end: Color
+) {
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(start, end)))
+            .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+    )
 }
 
 @Composable

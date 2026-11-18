@@ -8,6 +8,7 @@ import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
+import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.PlaybackController
@@ -20,7 +21,7 @@ import kotlinx.coroutines.launch
 
 class NowPlayingViewModel(
     private val playbackController: PlaybackController,
-    visualizerBus: VisualizerBus,
+    val visualizerBus: VisualizerBus,
     private val visualizerPreferences: VisualizerPreferencesDataSource
 ) : ViewModel() {
 
@@ -61,6 +62,10 @@ class NowPlayingViewModel(
 
     fun selectVisualizerStyle(style: VisualizerStyle) {
         viewModelScope.launch { visualizerPreferences.updateStyle(style) }
+    }
+
+    fun selectFillMode(fillMode: VisualizerFillMode) {
+        viewModelScope.launch { visualizerPreferences.updateFillMode(fillMode) }
     }
 
     fun selectVisualizerColorScheme(scheme: VisualizerColorScheme) {

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -16,6 +17,7 @@ import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
+import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -28,6 +30,7 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     private object Keys {
         val STYLE = stringPreferencesKey("visualizer_style")
+        val FILL_MODE = stringPreferencesKey("visualizer_fill_mode")
         val COLOR_SCHEME = stringPreferencesKey("visualizer_color_scheme")
         val DENSITY = stringPreferencesKey("visualizer_density")
         val SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
@@ -35,6 +38,7 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         val SPREAD_SCALE = floatPreferencesKey("visualizer_spread_scale")
         val STROKE_THICKNESS = floatPreferencesKey("visualizer_stroke_thickness")
         val ROTATION_SPEED = floatPreferencesKey("visualizer_rotation_speed")
+        val SYNC_OFFSET_MS = intPreferencesKey("visualizer_sync_offset_ms")
         val GLOW_ENABLED = booleanPreferencesKey("visualizer_glow_enabled")
         val PARTICLES_ENABLED = booleanPreferencesKey("visualizer_particles_enabled")
         val MIRROR_ENABLED = booleanPreferencesKey("visualizer_mirror_enabled")
@@ -59,6 +63,9 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             style = prefs[Keys.STYLE]?.let { name ->
                 VisualizerStyle.entries.firstOrNull { it.name == name }
             } ?: defaults.style,
+            fillMode = prefs[Keys.FILL_MODE]?.let { name ->
+                VisualizerFillMode.entries.firstOrNull { it.name == name }
+            } ?: defaults.fillMode,
             colorScheme = prefs[Keys.COLOR_SCHEME]?.let { name ->
                 VisualizerColorScheme.entries.firstOrNull { it.name == name }
             } ?: defaults.colorScheme,
@@ -72,6 +79,7 @@ class VisualizerPreferencesDataSource(private val context: Context) {
                 .coerceIn(0.6f, 1.8f),
             rotationSpeed = (prefs[Keys.ROTATION_SPEED] ?: defaults.rotationSpeed)
                 .coerceIn(0f, 2.5f),
+            syncOffsetMs = (prefs[Keys.SYNC_OFFSET_MS] ?: defaults.syncOffsetMs).coerceIn(0, 350),
             glowEnabled = prefs[Keys.GLOW_ENABLED] ?: defaults.glowEnabled,
             particlesEnabled = prefs[Keys.PARTICLES_ENABLED] ?: defaults.particlesEnabled,
             mirrorEnabled = prefs[Keys.MIRROR_ENABLED] ?: defaults.mirrorEnabled,
@@ -79,9 +87,11 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             visualMode = prefs[Keys.VISUAL_MODE]?.let { name ->
                 NowPlayingVisualMode.entries.firstOrNull { it.name == name }
             } ?: defaults.visualMode,
-            coverArtStyle = prefs[Keys.COVER_ART_STYLE]?.let { name ->
-                CoverArtStyle.entries.firstOrNull { it.name == name }
-            } ?: defaults.coverArtStyle,
+            coverArtStyle = when (prefs[Keys.COVER_ART_STYLE]) {
+                CoverArtStyle.VINYL_DISC.name -> CoverArtStyle.VINYL_DISC
+                "CARD_3D", "SOFT_GLASS", CoverArtStyle.COVER.name -> CoverArtStyle.COVER
+                else -> defaults.coverArtStyle
+            },
             accentMode = prefs[Keys.ACCENT_MODE]?.let { name ->
                 AppAccentMode.entries.firstOrNull { it.name == name }
             } ?: defaults.accentMode,
@@ -95,6 +105,14 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     suspend fun updateStyle(style: VisualizerStyle) {
         context.visualizerDataStore.edit { it[Keys.STYLE] = style.name }
+    }
+
+    suspend fun updateFillMode(fillMode: VisualizerFillMode) {
+        context.visualizerDataStore.edit { it[Keys.FILL_MODE] = fillMode.name }
+    }
+
+    suspend fun updateSyncOffsetMs(offsetMs: Int) {
+        context.visualizerDataStore.edit { it[Keys.SYNC_OFFSET_MS] = offsetMs.coerceIn(0, 350) }
     }
 
     suspend fun updateColorScheme(scheme: VisualizerColorScheme) {

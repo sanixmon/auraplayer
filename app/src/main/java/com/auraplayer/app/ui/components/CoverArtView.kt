@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -67,42 +66,26 @@ fun CoverArtView(
     val secondary = MaterialTheme.colorScheme.secondary
 
     when (style) {
-        CoverArtStyle.CARD_3D -> {
-            val shape = RoundedCornerShape(24.dp)
+        CoverArtStyle.COVER -> {
+            val shape = RoundedCornerShape(22.dp)
             Box(
                 modifier = modifier
                     .size(size)
                     .graphicsLayer {
                         scaleX = pulseScale
                         scaleY = pulseScale
-                        rotationX = if (isPlaying) 3.5f else 0f
-                        rotationY = if (isPlaying) -3.5f else 0f
-                        cameraDistance = 14f * density
                     }
                     .shadow(
-                        elevation = 24.dp,
+                        elevation = 20.dp,
                         shape = shape,
-                        ambientColor = accent.copy(alpha = 0.55f),
-                        spotColor = secondary.copy(alpha = 0.65f)
+                        ambientColor = accent.copy(alpha = 0.4f),
+                        spotColor = secondary.copy(alpha = 0.45f)
                     )
                     .clip(shape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                accent.copy(alpha = 0.25f),
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                secondary.copy(alpha = 0.22f)
-                            )
-                        )
-                    )
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(
-                        width = 1.2.dp,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.35f),
-                                Color.White.copy(alpha = 0.05f)
-                            )
-                        ),
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.14f),
                         shape = shape
                     ),
                 contentAlignment = Alignment.Center
@@ -162,34 +145,6 @@ fun CoverArtView(
                         .background(Color(0xFF0A0C12))
                         .border(1.5.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                 )
-            }
-        }
-
-        CoverArtStyle.SOFT_GLASS -> {
-            val shape = RoundedCornerShape(28.dp)
-            Box(
-                modifier = modifier
-                    .size(size)
-                    .graphicsLayer {
-                        scaleX = pulseScale
-                        scaleY = pulseScale
-                    }
-                    .shadow(
-                        elevation = 16.dp,
-                        shape = shape,
-                        ambientColor = accent.copy(alpha = 0.4f),
-                        spotColor = accent.copy(alpha = 0.5f)
-                    )
-                    .clip(shape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f))
-                    .border(
-                        width = 1.dp,
-                        color = accent.copy(alpha = 0.38f),
-                        shape = shape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                CoverArtImage(track = track, iconSize = size * 0.36f)
             }
         }
     }

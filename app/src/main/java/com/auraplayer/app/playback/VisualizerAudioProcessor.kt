@@ -8,22 +8,37 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Media3 AudioProcessor that taps decoded PCM samples through a continuous sliding ring buffer.
- * Supports 16-bit, 24-bit, 32-bit integer, and 32-bit float PCM without RECORD_AUDIO permission.
+ * Media3 AudioProcessor that taps decoded PCM samples into a continuous 4096-sample ring buffer
+ * on the audio thread and runs multi-resolution FFT off the audio thread on a dedicated worker.
  */
 @OptIn(UnstableApi::class)
 class VisualizerAudioProcessor(
     private val visualizerBus: VisualizerBus,
-    private val analyzer: AudioSpectrumAnalyzer = AudioSpectrumAnalyzer(fftSize = FFT_SIZE),
-    private val bandCountProvider: () -> Int = { 96 }
+    private val analyzer: AudioSpectrumAnalyzer = AudioSpectrumAnalyzer(
+        bassFftSize = FFT_SIZE,
+        detailFftSize = DETAIL_FFT_SIZE
+    ),
+    private val bandCountProvider: () -> Int = { visualizerBus.targetBandCount }
 ) : BaseAudioProcessor() {
 
     private val ringBuffer = FloatArray(FFT_SIZE)
-    private val orderedSamples = FloatArray(FFT_SIZE)
+    private val stagingSamples = FloatArray(FFT_SIZE)
+    private val workerSamples = FloatArray(FFT_SIZE)
     private var ringWritePos = 0
     private var samplesFilled = 0
+    private var stagingCount = 0
+    private var stagingSampleRate = 44100
+    private var stagingTimestampMs = 0L
+
+    private val handoffLock = Any()
+    private val workerScheduled = AtomicBoolean(false)
+    private val fftExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "aura-fft-worker").apply { isDaemon = true }
+    }
 
     @Volatile
     private var lastEmitElapsedMs = 0L
@@ -49,7 +64,7 @@ class VisualizerAudioProcessor(
         val now = SystemClock.elapsedRealtime()
         if (now - lastEmitElapsedMs >= FRAME_INTERVAL_MS && samplesFilled >= MIN_SAMPLES_TO_ANALYZE) {
             lastEmitElapsedMs = now
-            publishLatestWindow()
+            scheduleOffThreadAnalysis(now)
         }
 
         val out = replaceOutputBuffer(remaining)
@@ -58,17 +73,29 @@ class VisualizerAudioProcessor(
     }
 
     override fun onFlush() {
-        ringWritePos = 0
-        samplesFilled = 0
-        analyzer.reset()
-        visualizerBus.clear()
+        clearBuffersAndResetAnalyzer()
     }
 
     override fun onReset() {
-        ringWritePos = 0
-        samplesFilled = 0
-        analyzer.reset()
+        clearBuffersAndResetAnalyzer()
+    }
+
+    fun release() {
+        fftExecutor.shutdownNow()
+    }
+
+    private fun clearBuffersAndResetAnalyzer() {
+        synchronized(handoffLock) {
+            ringWritePos = 0
+            samplesFilled = 0
+            stagingCount = 0
+        }
         visualizerBus.clear()
+        if (!fftExecutor.isShutdown) {
+            fftExecutor.execute {
+                analyzer.reset()
+            }
+        }
     }
 
     private fun appendToRingBuffer(snapshot: ByteBuffer) {
@@ -79,7 +106,6 @@ class VisualizerAudioProcessor(
             C.ENCODING_PCM_16BIT -> {
                 val bytesPerFrame = channels * 2
                 val totalFrames = snapshot.remaining() / bytesPerFrame
-                // If a chunk exceeds FFT_SIZE, jump to the freshest tail so latency stays tight.
                 val skipFrames = (totalFrames - FFT_SIZE).coerceAtLeast(0)
                 if (skipFrames > 0) {
                     snapshot.position(snapshot.position() + skipFrames * bytesPerFrame)
@@ -157,28 +183,61 @@ class VisualizerAudioProcessor(
         }
     }
 
-    private fun publishLatestWindow() {
-        val count = samplesFilled
-        if (count == FFT_SIZE) {
-            val firstPart = FFT_SIZE - ringWritePos
-            System.arraycopy(ringBuffer, ringWritePos, orderedSamples, 0, firstPart)
-            if (ringWritePos > 0) {
-                System.arraycopy(ringBuffer, 0, orderedSamples, firstPart, ringWritePos)
+    private fun scheduleOffThreadAnalysis(nowElapsedMs: Long) {
+        val sampleRate = inputAudioFormat.sampleRate.takeIf { it > 0 } ?: 44100
+        synchronized(handoffLock) {
+            val count = samplesFilled
+            if (count < MIN_SAMPLES_TO_ANALYZE) return
+            if (count == FFT_SIZE) {
+                val firstPart = FFT_SIZE - ringWritePos
+                System.arraycopy(ringBuffer, ringWritePos, stagingSamples, 0, firstPart)
+                if (ringWritePos > 0) {
+                    System.arraycopy(ringBuffer, 0, stagingSamples, firstPart, ringWritePos)
+                }
+            } else {
+                System.arraycopy(ringBuffer, 0, stagingSamples, 0, count)
             }
-        } else {
-            System.arraycopy(ringBuffer, 0, orderedSamples, 0, count)
+            stagingCount = count
+            stagingSampleRate = sampleRate
+            stagingTimestampMs = nowElapsedMs
         }
 
-        val frame = analyzer.analyze(
-            monoSamples = orderedSamples,
-            sampleCount = count,
-            bandCount = bandCountProvider()
-        )
-        visualizerBus.publish(frame)
+        // Conflate pending hops so a busy CPU never builds an analysis backlog.
+        if (workerScheduled.compareAndSet(false, true) && !fftExecutor.isShutdown) {
+            fftExecutor.execute {
+                try {
+                    var count: Int
+                    var rate: Int
+                    var ts: Long
+                    synchronized(handoffLock) {
+                        count = stagingCount
+                        rate = stagingSampleRate
+                        ts = stagingTimestampMs
+                        if (count > 0) {
+                            System.arraycopy(stagingSamples, 0, workerSamples, 0, count)
+                        }
+                        workerScheduled.set(false)
+                    }
+                    if (count >= MIN_SAMPLES_TO_ANALYZE) {
+                        val frame = analyzer.analyze(
+                            monoSamples = workerSamples,
+                            sampleCount = count,
+                            bandCount = bandCountProvider(),
+                            sampleRateHz = rate,
+                            timestampMs = ts
+                        )
+                        visualizerBus.publish(frame)
+                    }
+                } finally {
+                    workerScheduled.set(false)
+                }
+            }
+        }
     }
 
     companion object {
-        private const val FFT_SIZE = 1024
+        private const val FFT_SIZE = 4096
+        private const val DETAIL_FFT_SIZE = 1024
         private const val MIN_SAMPLES_TO_ANALYZE = 256
         private const val FRAME_INTERVAL_MS = 16L
     }

@@ -7,6 +7,7 @@ import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
+import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.PlaybackController
 import com.auraplayer.app.playback.PlaybackUiState
@@ -42,6 +43,7 @@ class SettingsViewModelTest {
         )
 
         viewModel.setStyle(VisualizerStyle.CIRCULAR_AURA)
+        viewModel.setFillMode(VisualizerFillMode.SOLID)
         viewModel.setColorScheme(VisualizerColorScheme.NEON_CYBER)
         viewModel.setDensity(VisualizerDensity.ULTRA)
         viewModel.setSensitivity(1.8f)
@@ -49,6 +51,7 @@ class SettingsViewModelTest {
         viewModel.setSpreadScale(1.3f)
         viewModel.setStrokeThickness(1.4f)
         viewModel.setRotationSpeed(1.7f)
+        viewModel.setSyncOffsetMs(160)
         viewModel.setGlowEnabled(false)
         viewModel.setParticlesEnabled(false)
         viewModel.setMirrorEnabled(true)
@@ -61,6 +64,7 @@ class SettingsViewModelTest {
         viewModel.resetDefaults()
 
         coVerify { preferences.updateStyle(VisualizerStyle.CIRCULAR_AURA) }
+        coVerify { preferences.updateFillMode(VisualizerFillMode.SOLID) }
         coVerify { preferences.updateColorScheme(VisualizerColorScheme.NEON_CYBER) }
         coVerify { preferences.updateDensity(VisualizerDensity.ULTRA) }
         coVerify { preferences.updateSensitivity(1.8f) }
@@ -68,6 +72,7 @@ class SettingsViewModelTest {
         coVerify { preferences.updateSpreadScale(1.3f) }
         coVerify { preferences.updateStrokeThickness(1.4f) }
         coVerify { preferences.updateRotationSpeed(1.7f) }
+        coVerify { preferences.updateSyncOffsetMs(160) }
         coVerify { preferences.updateGlowEnabled(false) }
         coVerify { preferences.updateParticlesEnabled(false) }
         coVerify { preferences.updateMirrorEnabled(true) }

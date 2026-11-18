@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build FFmpeg (LGPL), Unit Test, Lint & arm64-v8a APKs
+    name: Build FFmpeg (LGPL), Unit Test, Lint & arm64-v8a Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -92,20 +92,15 @@ jobs:
       - name: Run Android Lint
         run: gradle lintDebug --stacktrace
 
-      - name: Build arm64-v8a Debug APK
-        run: gradle assembleDebug --stacktrace
-
       - name: Build Signed arm64-v8a Release APK
         run: gradle assembleRelease --stacktrace
 
-      - name: Upload arm64-v8a Debug & Release APKs
+      - name: Upload arm64-v8a Release APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aura-player-arm64-v8a-apks
-          path: |
-            app/build/outputs/apk/debug/*arm64-v8a*.apk
-            app/build/outputs/apk/release/*arm64-v8a*.apk
+          name: aura-player-arm64-v8a-release-apk
+          path: app/build/outputs/apk/release/*arm64-v8a*.apk
           if-no-files-found: warn
 
       - name: Upload Test & Lint Reports

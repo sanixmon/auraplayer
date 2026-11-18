@@ -8,6 +8,11 @@ enum class VisualizerStyle(val displayName: String) {
     PARTICLE_PULSE("Pulse")
 }
 
+enum class VisualizerFillMode(val displayName: String) {
+    LINE("Line"),
+    SOLID("Solid")
+}
+
 enum class VisualizerColorScheme(val displayName: String) {
     DYNAMIC("Dynamic"),
     CUSTOM("Custom"),
@@ -32,9 +37,8 @@ enum class NowPlayingVisualMode(val displayName: String) {
 }
 
 enum class CoverArtStyle(val displayName: String) {
-    CARD_3D("3D Card"),
-    VINYL_DISC("Vinyl"),
-    SOFT_GLASS("Glass")
+    COVER("Cover"),
+    VINYL_DISC("Vinyl")
 }
 
 enum class AppAccentMode(val displayName: String) {
@@ -60,6 +64,7 @@ enum class AppAccentPreset(
  */
 data class VisualizerConfig(
     val style: VisualizerStyle = VisualizerStyle.CIRCULAR_AURA,
+    val fillMode: VisualizerFillMode = VisualizerFillMode.LINE,
     val colorScheme: VisualizerColorScheme = VisualizerColorScheme.DYNAMIC,
     val density: VisualizerDensity = VisualizerDensity.HIGH,
     val sensitivity: Float = 1.3f,
@@ -67,12 +72,13 @@ data class VisualizerConfig(
     val spreadScale: Float = 1.0f,
     val strokeThickness: Float = 1.0f,
     val rotationSpeed: Float = 1.0f,
+    val syncOffsetMs: Int = 0,
     val glowEnabled: Boolean = true,
     val particlesEnabled: Boolean = true,
     val mirrorEnabled: Boolean = false,
     val peakCapsEnabled: Boolean = true,
     val visualMode: NowPlayingVisualMode = NowPlayingVisualMode.COVER_ONLY,
-    val coverArtStyle: CoverArtStyle = CoverArtStyle.CARD_3D,
+    val coverArtStyle: CoverArtStyle = CoverArtStyle.COVER,
     val accentMode: AppAccentMode = AppAccentMode.DYNAMIC_ALBUM,
     val accentPreset: AppAccentPreset = AppAccentPreset.AURORA_CYAN,
     val customAppPrimaryArgb: Long = AppAccentPreset.AURORA_CYAN.primaryHex,

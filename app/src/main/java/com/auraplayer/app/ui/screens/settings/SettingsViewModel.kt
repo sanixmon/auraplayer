@@ -11,6 +11,7 @@ import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
+import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.PlaybackController
@@ -23,7 +24,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val preferences: VisualizerPreferencesDataSource,
-    visualizerBus: VisualizerBus,
+    val visualizerBus: VisualizerBus,
     playbackController: PlaybackController
 ) : ViewModel() {
 
@@ -54,6 +55,14 @@ class SettingsViewModel(
 
     fun setStyle(style: VisualizerStyle) {
         viewModelScope.launch { preferences.updateStyle(style) }
+    }
+
+    fun setFillMode(fillMode: VisualizerFillMode) {
+        viewModelScope.launch { preferences.updateFillMode(fillMode) }
+    }
+
+    fun setSyncOffsetMs(offsetMs: Int) {
+        viewModelScope.launch { preferences.updateSyncOffsetMs(offsetMs) }
     }
 
     fun setColorScheme(scheme: VisualizerColorScheme) {

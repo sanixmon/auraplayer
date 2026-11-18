@@ -22,14 +22,15 @@ import com.auraplayer.app.MainActivity
 class AuraPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var visualizerProcessor: VisualizerAudioProcessor? = null
 
     override fun onCreate() {
         super.onCreate()
         val appContainer = (application as AuraApplication).container
-        val visualizerProcessor = VisualizerAudioProcessor(
-            visualizerBus = appContainer.visualizerBus,
-            bandCountProvider = { 96 }
+        val processor = VisualizerAudioProcessor(
+            visualizerBus = appContainer.visualizerBus
         )
+        visualizerProcessor = processor
 
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
@@ -40,7 +41,7 @@ class AuraPlaybackService : MediaSessionService() {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf(visualizerProcessor))
+                    .setAudioProcessors(arrayOf(processor))
                     .build()
             }
         }.apply {
@@ -104,6 +105,8 @@ class AuraPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        visualizerProcessor?.release()
+        visualizerProcessor = null
         mediaSession?.run {
             player.release()
             release()
