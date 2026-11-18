@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,11 +36,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,10 +54,17 @@ import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
+import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.ui.components.CoverArtView
+import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.VisualizerCanvas
 import java.util.Locale
+
+private enum class ColorPickerTarget {
+    APP_COLOR,
+    VISUALIZER_COLOR
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -66,8 +77,11 @@ fun SettingsScreen(
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
 
+    var activeColorPicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
+
     Scaffold(
         modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("Appearance", style = MaterialTheme.typography.titleLarge) },
@@ -86,15 +100,13 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Live Stage Preview: Cover Art Style + Avee/vizz.fm Visualizer + App Theme Accent
+            // Sticky Live Preview Stage pinned at the top while scrolling settings below
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(230.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(215.dp),
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 tonalElevation = 4.dp
@@ -109,57 +121,74 @@ fun SettingsScreen(
                         isPlaying = isPlaying,
                         demoWhenIdle = true,
                         centerRingRadiusRatio = 0.25f,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(10.dp)
+                        modifier = Modifier.fillMaxSize()
                     )
                     CoverArtView(
                         track = currentTrack,
                         style = config.coverArtStyle,
                         isPlaying = true,
                         bassEnergy = if (isPlaying) frame.bassEnergy else 0.25f,
-                        size = 112.dp
+                        size = 104.dp
                     )
                 }
             }
 
-            // App Theme Color + Cover Style
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            // Independently scrollable customization controls below the sticky preview
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                // App Color + Cover Style
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text("App Color", style = MaterialTheme.typography.titleMedium)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        FilterChip(
-                            selected = config.accentMode == AppAccentMode.DYNAMIC_ALBUM,
-                            onClick = { viewModel.setAccentMode(AppAccentMode.DYNAMIC_ALBUM) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            label = { Text("Dynamic") }
-                        )
-
-                        Row(
+                        Text("App Color", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically
                         ) {
+                            FilterChip(
+                                selected = config.accentMode == AppAccentMode.DYNAMIC_ALBUM,
+                                onClick = { viewModel.setAccentMode(AppAccentMode.DYNAMIC_ALBUM) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text("Dynamic") }
+                            )
+
+                            FilterChip(
+                                selected = config.accentMode == AppAccentMode.CUSTOM,
+                                onClick = { activeColorPicker = ColorPickerTarget.APP_COLOR },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Colorize,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text("Custom") }
+                            )
+
                             AppAccentPreset.entries.forEach { preset ->
                                 val isSelected = config.accentMode == AppAccentMode.CUSTOM &&
-                                    config.accentPreset == preset
+                                    config.customAppPrimaryArgb == preset.primaryHex &&
+                                    config.customAppSecondaryArgb == preset.secondaryHex
                                 Box(
                                     modifier = Modifier
                                         .size(30.dp)
@@ -193,123 +222,231 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                    }
 
-                    HorizontalDivider()
+                        HorizontalDivider()
 
-                    Text("Cover Art", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        CoverArtStyle.entries.forEach { style ->
-                            FilterChip(
-                                selected = config.coverArtStyle == style,
-                                onClick = { viewModel.setCoverArtStyle(style) },
-                                label = { Text(style.displayName) }
-                            )
+                        Text("Cover Art", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            CoverArtStyle.entries.forEach { style ->
+                                FilterChip(
+                                    selected = config.coverArtStyle == style,
+                                    onClick = { viewModel.setCoverArtStyle(style) },
+                                    label = { Text(style.displayName) }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // 5 Visualizer Controls
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                // Expanded Visualizer Studio
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    // 1. Style
-                    Text("Visualizer", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        VisualizerStyle.entries.forEach { style ->
-                            FilterChip(
-                                selected = config.style == style,
-                                onClick = { viewModel.setStyle(style) },
-                                label = { Text(style.displayName) }
-                            )
-                        }
-                    }
-
-                    // 2. Colors
-                    Text("Colors", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        VisualizerColorScheme.entries.forEach { scheme ->
-                            FilterChip(
-                                selected = config.colorScheme == scheme,
-                                onClick = { viewModel.setColorScheme(scheme) },
-                                label = { Text(scheme.displayName) }
-                            )
-                        }
-                    }
-
-                    // 3. Intensity
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Text("Visualizer", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text("Intensity", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = String.format(Locale.US, "%.1fx", config.sensitivity),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            VisualizerStyle.entries.forEach { style ->
+                                FilterChip(
+                                    selected = config.style == style,
+                                    onClick = { viewModel.setStyle(style) },
+                                    label = { Text(style.displayName) }
+                                )
+                            }
                         }
-                        Slider(
+
+                        Text("Colors", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            VisualizerColorScheme.entries.forEach { scheme ->
+                                FilterChip(
+                                    selected = config.colorScheme == scheme,
+                                    onClick = {
+                                        if (scheme == VisualizerColorScheme.CUSTOM) {
+                                            activeColorPicker = ColorPickerTarget.VISUALIZER_COLOR
+                                        } else {
+                                            viewModel.setColorScheme(scheme)
+                                        }
+                                    },
+                                    leadingIcon = if (scheme == VisualizerColorScheme.CUSTOM) {
+                                        {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        Brush.linearGradient(
+                                                            listOf(
+                                                                Color(config.customVizPrimaryArgb),
+                                                                Color(config.customVizSecondaryArgb)
+                                                            )
+                                                        )
+                                                    )
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    label = { Text(scheme.displayName) }
+                                )
+                            }
+                        }
+
+                        Text("Bars", style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            VisualizerDensity.entries.forEach { density ->
+                                FilterChip(
+                                    selected = config.density == density,
+                                    onClick = { viewModel.setDensity(density) },
+                                    label = { Text(density.displayName) }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        SettingSlider(
+                            label = "Intensity",
+                            valueText = String.format(Locale.US, "%.1fx", config.sensitivity),
                             value = config.sensitivity,
-                            onValueChange = viewModel::setSensitivity,
-                            valueRange = 0.5f..2.5f
+                            range = 0.5f..2.5f,
+                            onValueChange = viewModel::setSensitivity
                         )
-                    }
 
-                    // 4. Smoothness
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        SettingSlider(
+                            label = "Smoothness",
+                            valueText = "${(config.smoothing * 100).toInt()}%",
+                            value = config.smoothing,
+                            range = 0.15f..0.95f,
+                            onValueChange = viewModel::setSmoothing
+                        )
+
+                        SettingSlider(
+                            label = "Spread",
+                            valueText = String.format(Locale.US, "%.1fx", config.spreadScale),
+                            value = config.spreadScale,
+                            range = 0.5f..1.5f,
+                            onValueChange = viewModel::setSpreadScale
+                        )
+
+                        SettingSlider(
+                            label = "Thickness",
+                            valueText = String.format(Locale.US, "%.1fx", config.strokeThickness),
+                            value = config.strokeThickness,
+                            range = 0.6f..1.8f,
+                            onValueChange = viewModel::setStrokeThickness
+                        )
+
+                        SettingSlider(
+                            label = "Speed",
+                            valueText = String.format(Locale.US, "%.1fx", config.rotationSpeed),
+                            value = config.rotationSpeed,
+                            range = 0f..2.5f,
+                            onValueChange = viewModel::setRotationSpeed
+                        )
+
+                        HorizontalDivider()
+
+                        Text("Effects", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text("Smoothness", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = "${(config.smoothing * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
+                            FilterChip(
+                                selected = config.glowEnabled,
+                                onClick = { viewModel.setGlowEnabled(!config.glowEnabled) },
+                                label = { Text("Glow") }
+                            )
+                            FilterChip(
+                                selected = config.particlesEnabled,
+                                onClick = { viewModel.setParticlesEnabled(!config.particlesEnabled) },
+                                label = { Text("Particles") }
+                            )
+                            FilterChip(
+                                selected = config.peakCapsEnabled,
+                                onClick = { viewModel.setPeakCapsEnabled(!config.peakCapsEnabled) },
+                                label = { Text("Peak Dots") }
+                            )
+                            FilterChip(
+                                selected = config.mirrorEnabled,
+                                onClick = { viewModel.setMirrorEnabled(!config.mirrorEnabled) },
+                                label = { Text("Mirror") }
                             )
                         }
-                        Slider(
-                            value = config.smoothing,
-                            onValueChange = viewModel::setSmoothing,
-                            valueRange = 0.15f..0.95f
-                        )
-                    }
-
-                    // 5. Glow
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Glow", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = config.glowEnabled,
-                            onCheckedChange = viewModel::setGlowEnabled
-                        )
                     }
                 }
-            }
 
-            Spacer(Modifier.height(96.dp))
+                Spacer(Modifier.height(104.dp))
+            }
         }
+    }
+
+    when (activeColorPicker) {
+        ColorPickerTarget.APP_COLOR -> {
+            DualColorWheelDialog(
+                title = "App Color",
+                initialPrimaryArgb = config.customAppPrimaryArgb,
+                initialSecondaryArgb = config.customAppSecondaryArgb,
+                onDismiss = { activeColorPicker = null },
+                onConfirm = { p, s ->
+                    viewModel.setCustomAppColors(p, s)
+                    activeColorPicker = null
+                }
+            )
+        }
+        ColorPickerTarget.VISUALIZER_COLOR -> {
+            DualColorWheelDialog(
+                title = "Visualizer Colors",
+                initialPrimaryArgb = config.customVizPrimaryArgb,
+                initialSecondaryArgb = config.customVizSecondaryArgb,
+                onDismiss = { activeColorPicker = null },
+                onConfirm = { p, s ->
+                    viewModel.setCustomVisualizerColors(p, s)
+                    activeColorPicker = null
+                }
+            )
+        }
+        null -> Unit
+    }
+}
+
+@Composable
+private fun SettingSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range
+        )
     }
 }

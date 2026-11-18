@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.auraplayer.app.data.model.AppAccentMode
@@ -31,17 +32,29 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         val DENSITY = stringPreferencesKey("visualizer_density")
         val SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
         val SMOOTHING = floatPreferencesKey("visualizer_smoothing")
+        val SPREAD_SCALE = floatPreferencesKey("visualizer_spread_scale")
+        val STROKE_THICKNESS = floatPreferencesKey("visualizer_stroke_thickness")
+        val ROTATION_SPEED = floatPreferencesKey("visualizer_rotation_speed")
         val GLOW_ENABLED = booleanPreferencesKey("visualizer_glow_enabled")
+        val PARTICLES_ENABLED = booleanPreferencesKey("visualizer_particles_enabled")
         val MIRROR_ENABLED = booleanPreferencesKey("visualizer_mirror_enabled")
         val PEAK_CAPS_ENABLED = booleanPreferencesKey("visualizer_peak_caps_enabled")
         val VISUAL_MODE = stringPreferencesKey("now_playing_visual_mode")
         val COVER_ART_STYLE = stringPreferencesKey("cover_art_style")
         val ACCENT_MODE = stringPreferencesKey("app_accent_mode")
         val ACCENT_PRESET = stringPreferencesKey("app_accent_preset")
+        val CUSTOM_APP_PRIMARY = longPreferencesKey("custom_app_primary_argb")
+        val CUSTOM_APP_SECONDARY = longPreferencesKey("custom_app_secondary_argb")
+        val CUSTOM_VIZ_PRIMARY = longPreferencesKey("custom_viz_primary_argb")
+        val CUSTOM_VIZ_SECONDARY = longPreferencesKey("custom_viz_secondary_argb")
     }
 
     val configFlow: Flow<VisualizerConfig> = context.visualizerDataStore.data.map { prefs ->
         val defaults = VisualizerConfig()
+        val preset = prefs[Keys.ACCENT_PRESET]?.let { name ->
+            AppAccentPreset.entries.firstOrNull { it.name == name }
+        } ?: defaults.accentPreset
+
         VisualizerConfig(
             style = prefs[Keys.STYLE]?.let { name ->
                 VisualizerStyle.entries.firstOrNull { it.name == name }
@@ -54,7 +67,13 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             } ?: defaults.density,
             sensitivity = (prefs[Keys.SENSITIVITY] ?: defaults.sensitivity).coerceIn(0.5f, 2.5f),
             smoothing = (prefs[Keys.SMOOTHING] ?: defaults.smoothing).coerceIn(0.15f, 0.95f),
+            spreadScale = (prefs[Keys.SPREAD_SCALE] ?: defaults.spreadScale).coerceIn(0.5f, 1.5f),
+            strokeThickness = (prefs[Keys.STROKE_THICKNESS] ?: defaults.strokeThickness)
+                .coerceIn(0.6f, 1.8f),
+            rotationSpeed = (prefs[Keys.ROTATION_SPEED] ?: defaults.rotationSpeed)
+                .coerceIn(0f, 2.5f),
             glowEnabled = prefs[Keys.GLOW_ENABLED] ?: defaults.glowEnabled,
+            particlesEnabled = prefs[Keys.PARTICLES_ENABLED] ?: defaults.particlesEnabled,
             mirrorEnabled = prefs[Keys.MIRROR_ENABLED] ?: defaults.mirrorEnabled,
             peakCapsEnabled = prefs[Keys.PEAK_CAPS_ENABLED] ?: defaults.peakCapsEnabled,
             visualMode = prefs[Keys.VISUAL_MODE]?.let { name ->
@@ -66,9 +85,11 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             accentMode = prefs[Keys.ACCENT_MODE]?.let { name ->
                 AppAccentMode.entries.firstOrNull { it.name == name }
             } ?: defaults.accentMode,
-            accentPreset = prefs[Keys.ACCENT_PRESET]?.let { name ->
-                AppAccentPreset.entries.firstOrNull { it.name == name }
-            } ?: defaults.accentPreset
+            accentPreset = preset,
+            customAppPrimaryArgb = prefs[Keys.CUSTOM_APP_PRIMARY] ?: preset.primaryHex,
+            customAppSecondaryArgb = prefs[Keys.CUSTOM_APP_SECONDARY] ?: preset.secondaryHex,
+            customVizPrimaryArgb = prefs[Keys.CUSTOM_VIZ_PRIMARY] ?: defaults.customVizPrimaryArgb,
+            customVizSecondaryArgb = prefs[Keys.CUSTOM_VIZ_SECONDARY] ?: defaults.customVizSecondaryArgb
         )
     }
 
@@ -92,8 +113,26 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         context.visualizerDataStore.edit { it[Keys.SMOOTHING] = smoothing.coerceIn(0.15f, 0.95f) }
     }
 
+    suspend fun updateSpreadScale(scale: Float) {
+        context.visualizerDataStore.edit { it[Keys.SPREAD_SCALE] = scale.coerceIn(0.5f, 1.5f) }
+    }
+
+    suspend fun updateStrokeThickness(thickness: Float) {
+        context.visualizerDataStore.edit {
+            it[Keys.STROKE_THICKNESS] = thickness.coerceIn(0.6f, 1.8f)
+        }
+    }
+
+    suspend fun updateRotationSpeed(speed: Float) {
+        context.visualizerDataStore.edit { it[Keys.ROTATION_SPEED] = speed.coerceIn(0f, 2.5f) }
+    }
+
     suspend fun updateGlowEnabled(enabled: Boolean) {
         context.visualizerDataStore.edit { it[Keys.GLOW_ENABLED] = enabled }
+    }
+
+    suspend fun updateParticlesEnabled(enabled: Boolean) {
+        context.visualizerDataStore.edit { it[Keys.PARTICLES_ENABLED] = enabled }
     }
 
     suspend fun updateMirrorEnabled(enabled: Boolean) {
@@ -120,6 +159,24 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         context.visualizerDataStore.edit {
             it[Keys.ACCENT_PRESET] = preset.name
             it[Keys.ACCENT_MODE] = AppAccentMode.CUSTOM.name
+            it[Keys.CUSTOM_APP_PRIMARY] = preset.primaryHex
+            it[Keys.CUSTOM_APP_SECONDARY] = preset.secondaryHex
+        }
+    }
+
+    suspend fun updateCustomAppColors(primaryArgb: Long, secondaryArgb: Long) {
+        context.visualizerDataStore.edit {
+            it[Keys.ACCENT_MODE] = AppAccentMode.CUSTOM.name
+            it[Keys.CUSTOM_APP_PRIMARY] = primaryArgb
+            it[Keys.CUSTOM_APP_SECONDARY] = secondaryArgb
+        }
+    }
+
+    suspend fun updateCustomVisualizerColors(primaryArgb: Long, secondaryArgb: Long) {
+        context.visualizerDataStore.edit {
+            it[Keys.COLOR_SCHEME] = VisualizerColorScheme.CUSTOM.name
+            it[Keys.CUSTOM_VIZ_PRIMARY] = primaryArgb
+            it[Keys.CUSTOM_VIZ_SECONDARY] = secondaryArgb
         }
     }
 

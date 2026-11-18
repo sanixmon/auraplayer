@@ -33,9 +33,9 @@ fun rememberResolvedAccentColors(
     config: VisualizerConfig
 ): AccentColors {
     val context = LocalContext.current
-    val fallback = AccentColors(
-        primary = Color(config.accentPreset.primaryHex),
-        secondary = Color(config.accentPreset.secondaryHex)
+    val customOrFallback = AccentColors(
+        primary = Color(config.customAppPrimaryArgb),
+        secondary = Color(config.customAppSecondaryArgb)
     )
     var extracted by remember { mutableStateOf<AccentColors?>(null) }
 
@@ -48,9 +48,12 @@ fun rememberResolvedAccentColors(
     }
 
     return if (config.accentMode == AppAccentMode.DYNAMIC_ALBUM) {
-        extracted ?: fallback
+        extracted ?: AccentColors(
+            primary = Color(config.accentPreset.primaryHex),
+            secondary = Color(config.accentPreset.secondaryHex)
+        )
     } else {
-        fallback
+        customOrFallback
     }
 }
 

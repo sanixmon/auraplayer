@@ -49,16 +49,22 @@ class NowPlayingViewModel(
 
     fun cycleRepeatMode() = playbackController.cycleRepeatMode()
 
+    fun cycleVisualMode() {
+        val current = visualizerConfig.value.visualMode
+        val next = when (current) {
+            NowPlayingVisualMode.COVER_ONLY -> NowPlayingVisualMode.COVER_AND_VISUALIZER
+            NowPlayingVisualMode.COVER_AND_VISUALIZER -> NowPlayingVisualMode.VISUALIZER_ONLY
+            NowPlayingVisualMode.VISUALIZER_ONLY -> NowPlayingVisualMode.COVER_ONLY
+        }
+        viewModelScope.launch { visualizerPreferences.updateVisualMode(next) }
+    }
+
     fun selectVisualizerStyle(style: VisualizerStyle) {
         viewModelScope.launch { visualizerPreferences.updateStyle(style) }
     }
 
     fun selectVisualizerColorScheme(scheme: VisualizerColorScheme) {
         viewModelScope.launch { visualizerPreferences.updateColorScheme(scheme) }
-    }
-
-    fun selectVisualMode(mode: NowPlayingVisualMode) {
-        viewModelScope.launch { visualizerPreferences.updateVisualMode(mode) }
     }
 
     fun selectCoverArtStyle(style: CoverArtStyle) {

@@ -10,6 +10,7 @@ import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
+import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.PlaybackController
@@ -59,6 +60,10 @@ class SettingsViewModel(
         viewModelScope.launch { preferences.updateColorScheme(scheme) }
     }
 
+    fun setDensity(density: VisualizerDensity) {
+        viewModelScope.launch { preferences.updateDensity(density) }
+    }
+
     fun setSensitivity(value: Float) {
         viewModelScope.launch { preferences.updateSensitivity(value) }
     }
@@ -67,8 +72,32 @@ class SettingsViewModel(
         viewModelScope.launch { preferences.updateSmoothing(value) }
     }
 
+    fun setSpreadScale(value: Float) {
+        viewModelScope.launch { preferences.updateSpreadScale(value) }
+    }
+
+    fun setStrokeThickness(value: Float) {
+        viewModelScope.launch { preferences.updateStrokeThickness(value) }
+    }
+
+    fun setRotationSpeed(value: Float) {
+        viewModelScope.launch { preferences.updateRotationSpeed(value) }
+    }
+
     fun setGlowEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.updateGlowEnabled(enabled) }
+    }
+
+    fun setParticlesEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updateParticlesEnabled(enabled) }
+    }
+
+    fun setMirrorEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updateMirrorEnabled(enabled) }
+    }
+
+    fun setPeakCapsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updatePeakCapsEnabled(enabled) }
     }
 
     fun setCoverArtStyle(style: CoverArtStyle) {
@@ -81,6 +110,16 @@ class SettingsViewModel(
 
     fun setAccentPreset(preset: AppAccentPreset) {
         viewModelScope.launch { preferences.updateAccentPreset(preset) }
+    }
+
+    fun setCustomAppColors(primaryArgb: Long, secondaryArgb: Long) {
+        viewModelScope.launch { preferences.updateCustomAppColors(primaryArgb, secondaryArgb) }
+    }
+
+    fun setCustomVisualizerColors(primaryArgb: Long, secondaryArgb: Long) {
+        viewModelScope.launch {
+            preferences.updateCustomVisualizerColors(primaryArgb, secondaryArgb)
+        }
     }
 
     fun resetDefaults() {

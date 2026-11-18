@@ -14,8 +14,5 @@ sealed interface AuraRoute {
     data class PlaylistDetail(val playlistId: Long) : AuraRoute
 
     @Serializable
-    data object NowPlaying : AuraRoute
-
-    @Serializable
     data object Settings : AuraRoute
 }

@@ -1,7 +1,7 @@
 package com.auraplayer.app.data.model
 
 enum class VisualizerStyle(val displayName: String) {
-    CIRCULAR_AURA("Avee Ring"),
+    CIRCULAR_AURA("Ring"),
     BARS("Bars"),
     WAVEFORM("Wave"),
     MIRROR_SPECTRUM("Mirror"),
@@ -10,6 +10,7 @@ enum class VisualizerStyle(val displayName: String) {
 
 enum class VisualizerColorScheme(val displayName: String) {
     DYNAMIC("Dynamic"),
+    CUSTOM("Custom"),
     AURORA("Aurora"),
     SOLAR_FLARE("Solar"),
     NEON_CYBER("Neon"),
@@ -25,8 +26,8 @@ enum class VisualizerDensity(val displayName: String, val bandCount: Int) {
 }
 
 enum class NowPlayingVisualMode(val displayName: String) {
-    COVER_AND_VISUALIZER("Art + Vibe"),
     COVER_ONLY("Cover"),
+    COVER_AND_VISUALIZER("Art + Visualizer"),
     VISUALIZER_ONLY("Visualizer")
 }
 
@@ -63,11 +64,19 @@ data class VisualizerConfig(
     val density: VisualizerDensity = VisualizerDensity.HIGH,
     val sensitivity: Float = 1.3f,
     val smoothing: Float = 0.65f,
+    val spreadScale: Float = 1.0f,
+    val strokeThickness: Float = 1.0f,
+    val rotationSpeed: Float = 1.0f,
     val glowEnabled: Boolean = true,
+    val particlesEnabled: Boolean = true,
     val mirrorEnabled: Boolean = false,
     val peakCapsEnabled: Boolean = true,
-    val visualMode: NowPlayingVisualMode = NowPlayingVisualMode.COVER_AND_VISUALIZER,
+    val visualMode: NowPlayingVisualMode = NowPlayingVisualMode.COVER_ONLY,
     val coverArtStyle: CoverArtStyle = CoverArtStyle.CARD_3D,
     val accentMode: AppAccentMode = AppAccentMode.DYNAMIC_ALBUM,
-    val accentPreset: AppAccentPreset = AppAccentPreset.AURORA_CYAN
+    val accentPreset: AppAccentPreset = AppAccentPreset.AURORA_CYAN,
+    val customAppPrimaryArgb: Long = AppAccentPreset.AURORA_CYAN.primaryHex,
+    val customAppSecondaryArgb: Long = AppAccentPreset.AURORA_CYAN.secondaryHex,
+    val customVizPrimaryArgb: Long = 0xFF00E5FF,
+    val customVizSecondaryArgb: Long = 0xFFA855F7
 )
