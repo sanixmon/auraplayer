@@ -32,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: app/libs/lib-decoder-ffmpeg-release.aar
-          key: media3-1.5.1-ffmpeg-6.0-lgpl-v1
+          key: media3-1.5.1-ffmpeg-6.0-lgpl-v2
 
       - name: Build LGPL Media3 FFmpeg AAR (on cache miss)
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -42,7 +42,7 @@ jobs:
           sudo apt-get install -y nasm
           SDKMANAGER=$(command -v sdkmanager || ls "${ANDROID_HOME}"/cmdline-tools/*/bin/sdkmanager | head -n 1)
           set +o pipefail
-          yes | "${SDKMANAGER}" "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
+          yes | "${SDKMANAGER}" "ndk;25.1.8937393" "cmake;3.22.1" >/dev/null
           set -o pipefail
 
           WORK_DIR="${RUNNER_TEMP}/media3-ffmpeg"
@@ -50,9 +50,9 @@ jobs:
           git clone --depth 1 --branch 1.5.1 https://github.com/androidx/media.git "${WORK_DIR}/media"
 
           FFMPEG_MODULE_PATH="${WORK_DIR}/media/libraries/decoder_ffmpeg/src/main"
-          NDK_PATH="${ANDROID_HOME}/ndk/26.1.10909125"
+          NDK_PATH="${ANDROID_HOME}/ndk/25.1.8937393"
           HOST_PLATFORM="linux-x86_64"
-          ANDROID_API=26
+          ANDROID_API=21
           ENABLED_DECODERS=(mp3 aac ac3 eac3 dca alac flac vorbis opus wmav1 wmav2 wmapro ape mpc7 mpc8 tta wavpack mlp truehd pcm_s16le pcm_s24le pcm_s32le pcm_f32le)
 
           git clone --depth 1 --branch release/6.0 https://github.com/FFmpeg/FFmpeg.git "${FFMPEG_MODULE_PATH}/jni/ffmpeg"
