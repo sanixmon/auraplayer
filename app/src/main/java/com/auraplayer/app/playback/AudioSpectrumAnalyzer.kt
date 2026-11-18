@@ -131,8 +131,8 @@ class AudioSpectrumAnalyzer(
         if (rms < NOISE_GATE_RMS) {
             val releaseAlpha = 1f - exp(-dt / PEAK_RELEASE_SEC)
             peakDbTracker += (PEAK_FLOOR_DB - peakDbTracker) * releaseAlpha
-            beatEnvelope *= exp(-dt / BEAT_DECAY_SEC)
             prevPreAgcBass.fill(0f)
+            updateBeatAndBpm(avgFlux = 0f, timestampMs = timestampMs, dt = dt)
             val zeroBands = List(safeBandCount) { 0f }
             val waveList = waveformScratch.toList()
             return VisualizerFrame(
