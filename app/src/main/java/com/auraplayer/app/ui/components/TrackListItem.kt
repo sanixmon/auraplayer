@@ -1,0 +1,153 @@
+package com.auraplayer.app.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.FindInPage
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.auraplayer.app.data.model.Track
+import com.auraplayer.app.ui.util.formatDurationMs
+
+@Composable
+fun TrackListItem(
+    track: Track,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onAddToPlaylist: (() -> Unit)? = null,
+    onRelocateUnavailable: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null
+) {
+    val bgColor = when {
+        !track.isAvailable -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .clickable(enabled = track.isAvailable, onClick = onClick)
+            .alpha(if (track.isAvailable) 1f else 0.62f)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when {
+                    !track.isAvailable -> Icons.Rounded.WarningAmber
+                    isActive -> Icons.Rounded.GraphicEq
+                    else -> Icons.Rounded.MusicNote
+                },
+                contentDescription = null,
+                tint = when {
+                    !track.isAvailable -> MaterialTheme.colorScheme.error
+                    isActive -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.size(22.dp)
+            )
+            if (track.isAvailable && track.albumArtUri != null) {
+                AsyncImage(
+                    model = track.albumArtUri,
+                    contentDescription = track.album,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isActive && track.isAvailable) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FormatBadge(format = track.format)
+                if (!track.isAvailable) {
+                    Text(
+                        text = "Unavailable",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Text(
+                    text = "${track.artist} • ${formatDurationMs(track.durationMs)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (!track.isAvailable && onRelocateUnavailable != null) {
+            IconButton(onClick = onRelocateUnavailable) {
+                Icon(
+                    imageVector = Icons.Rounded.FindInPage,
+                    contentDescription = "Relocate missing track",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        } else if (track.isAvailable && onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    contentDescription = "Add to playlist",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        trailingContent?.invoke()
+    }
+}
