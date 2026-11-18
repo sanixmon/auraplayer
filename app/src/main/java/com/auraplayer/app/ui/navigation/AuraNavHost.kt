@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
@@ -61,9 +60,8 @@ private data class TopLevelDestination(
 )
 
 private val topLevelDestinations = listOf(
-    TopLevelDestination(AuraRoute.Library, "Library", Icons.Rounded.LibraryMusic),
+    TopLevelDestination(AuraRoute.Library, "Songs", Icons.Rounded.LibraryMusic),
     TopLevelDestination(AuraRoute.Playlists, "Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
-    TopLevelDestination(AuraRoute.NowPlaying, "Visualizer", Icons.Rounded.GraphicEq),
     TopLevelDestination(AuraRoute.Settings, "Settings", Icons.Rounded.Tune)
 )
 
@@ -107,7 +105,7 @@ fun AuraAppRoot(
                             visualizerConfig = visualizerConfig,
                             onTogglePlayPause = appContainer.playbackController::togglePlayPause,
                             onSkipNext = appContainer.playbackController::skipToNext,
-                            onClick = { navigateTopLevel(AuraRoute.NowPlaying) }
+                            onClick = { navController.navigate(AuraRoute.NowPlaying) }
                         )
                     }
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -182,8 +180,7 @@ fun AuraAppRoot(
                             composable<AuraRoute.Playlists> {
                                 val vm: PlaylistsViewModel = viewModel(
                                     factory = PlaylistsViewModel.Factory(
-                                        playlistRepository = appContainer.playlistRepository,
-                                        backupManager = appContainer.backupManager
+                                        playlistRepository = appContainer.playlistRepository
                                     )
                                 )
                                 PlaylistsScreen(
@@ -200,8 +197,7 @@ fun AuraAppRoot(
                                     factory = PlaylistDetailViewModel.Factory(
                                         playlistId = route.playlistId,
                                         playlistRepository = appContainer.playlistRepository,
-                                        musicRepository = appContainer.musicRepository,
-                                        backupManager = appContainer.backupManager
+                                        musicRepository = appContainer.musicRepository
                                     )
                                 )
                                 PlaylistDetailScreen(
@@ -228,9 +224,6 @@ fun AuraAppRoot(
                                         if (!navController.popBackStack()) {
                                             navigateTopLevel(AuraRoute.Library)
                                         }
-                                    },
-                                    onOpenVisualizerSettings = {
-                                        navigateTopLevel(AuraRoute.Settings)
                                     }
                                 )
                             }
@@ -239,7 +232,6 @@ fun AuraAppRoot(
                                 val vm: SettingsViewModel = viewModel(
                                     factory = SettingsViewModel.Factory(
                                         preferences = appContainer.visualizerPreferences,
-                                        backupManager = appContainer.backupManager,
                                         visualizerBus = appContainer.visualizerBus,
                                         playbackController = appContainer.playbackController
                                     )
@@ -249,7 +241,6 @@ fun AuraAppRoot(
                         }
                     }
 
-                    // Show MiniPlayerBar on Medium tablets (single-pane + NavRail), hide on Expanded two-pane.
                     if (useNavRail && !isExpandedTwoPane && !isNowPlayingRoute && playbackState.currentTrack != null) {
                         MiniPlayerBar(
                             playbackState = playbackState,
@@ -257,7 +248,7 @@ fun AuraAppRoot(
                             visualizerConfig = visualizerConfig,
                             onTogglePlayPause = appContainer.playbackController::togglePlayPause,
                             onSkipNext = appContainer.playbackController::skipToNext,
-                            onClick = { navigateTopLevel(AuraRoute.NowPlaying) },
+                            onClick = { navController.navigate(AuraRoute.NowPlaying) },
                             modifier = Modifier
                                 .navigationBarsPadding()
                                 .padding(bottom = 8.dp)
@@ -279,12 +270,9 @@ fun AuraAppRoot(
                 NowPlayingScreen(
                     viewModel = sidePlayerVm,
                     onBack = {},
-                    onOpenVisualizerSettings = {
-                        navigateTopLevel(AuraRoute.Settings)
-                    },
                     isDockedSidePane = true,
                     onExpandFullScreen = {
-                        navigateTopLevel(AuraRoute.NowPlaying)
+                        navController.navigate(AuraRoute.NowPlaying)
                     },
                     modifier = Modifier
                         .weight(0.44f)

@@ -1,30 +1,30 @@
 package com.auraplayer.app.data.model
 
-enum class VisualizerStyle(val displayName: String, val subtitle: String) {
-    BARS("Aurora Bars", "Rounded harmonic spectrum bars"),
-    WAVEFORM("Fluid Wave", "Real-time dual-layer oscilloscope"),
-    CIRCULAR_AURA("Circular Aura", "Radial pulsing energy ring"),
-    MIRROR_SPECTRUM("Mirror Spectrum", "Symmetrical center-out spectrum"),
-    PARTICLE_PULSE("Particle Pulse", "Frequency-driven luminous orbs")
+enum class VisualizerStyle(val displayName: String) {
+    BARS("Bars"),
+    WAVEFORM("Wave"),
+    CIRCULAR_AURA("Aura"),
+    MIRROR_SPECTRUM("Mirror"),
+    PARTICLE_PULSE("Pulse")
 }
 
 enum class VisualizerColorScheme(val displayName: String) {
-    AURORA("Aurora Cyan-Violet"),
-    SOLAR_FLARE("Solar Flare"),
-    NEON_CYBER("Neon Cyber"),
-    OCEAN_MIST("Ocean Mist"),
-    MONOCHROME_GOLD("Champagne Gold")
+    AURORA("Aurora"),
+    SOLAR_FLARE("Solar"),
+    NEON_CYBER("Neon"),
+    OCEAN_MIST("Ocean"),
+    MONOCHROME_GOLD("Gold")
 }
 
 enum class VisualizerDensity(val displayName: String, val bandCount: Int) {
-    LOW("Minimal (24)", 24),
-    MEDIUM("Balanced (48)", 48),
-    HIGH("Detailed (64)", 64),
-    ULTRA("Studio (96)", 96)
+    LOW("24", 24),
+    MEDIUM("48", 48),
+    HIGH("64", 64),
+    ULTRA("96", 96)
 }
 
 /**
- * Customizable settings for the Sound Visualizer (8 distinct controls, exceeding the 5+ PRD target).
+ * Persisted sound visualizer configuration.
  */
 data class VisualizerConfig(
     val style: VisualizerStyle = VisualizerStyle.BARS,

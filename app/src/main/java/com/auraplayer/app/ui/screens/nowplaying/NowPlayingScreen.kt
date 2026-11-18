@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.OpenInFull
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -63,17 +63,15 @@ import coil.compose.AsyncImage
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.RepeatMode
-import com.auraplayer.app.ui.components.FormatBadge
 import com.auraplayer.app.ui.components.TrackListItem
 import com.auraplayer.app.ui.components.VisualizerCanvas
 import com.auraplayer.app.ui.util.formatDurationMs
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NowPlayingScreen(
     viewModel: NowPlayingViewModel,
     onBack: () -> Unit,
-    onOpenVisualizerSettings: () -> Unit,
     modifier: Modifier = Modifier,
     isDockedSidePane: Boolean = false,
     onExpandFullScreen: (() -> Unit)? = null
@@ -83,6 +81,7 @@ fun NowPlayingScreen(
     val visualizerConfig by viewModel.visualizerConfig.collectAsStateWithLifecycle()
 
     var showQueueSheet by remember { mutableStateOf(false) }
+    var showVisualizerSheet by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableFloatStateOf(0f) }
 
@@ -100,7 +99,7 @@ fun NowPlayingScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = if (isDockedSidePane) "Visualizer Deck" else "Now Playing",
+                        text = if (isDockedSidePane) "Playing" else "",
                         style = MaterialTheme.typography.titleMedium
                     )
                 },
@@ -109,7 +108,7 @@ fun NowPlayingScreen(
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.Rounded.KeyboardArrowDown,
-                                contentDescription = "Collapse player"
+                                contentDescription = "Close"
                             )
                         }
                     }
@@ -119,20 +118,20 @@ fun NowPlayingScreen(
                         IconButton(onClick = onExpandFullScreen) {
                             Icon(
                                 imageVector = Icons.Rounded.OpenInFull,
-                                contentDescription = "Expand visualizer"
+                                contentDescription = "Expand"
                             )
                         }
+                    }
+                    IconButton(onClick = { showVisualizerSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Palette,
+                            contentDescription = "Visualizer look"
+                        )
                     }
                     IconButton(onClick = { showQueueSheet = true }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                            contentDescription = "Playback queue"
-                        )
-                    }
-                    IconButton(onClick = onOpenVisualizerSettings) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = "Customize visualizer"
+                            contentDescription = "Queue"
                         )
                     }
                 }
@@ -144,14 +143,14 @@ fun NowPlayingScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (isDockedSidePane) 210.dp else 260.dp),
-                shape = RoundedCornerShape(24.dp),
+                    .height(if (isDockedSidePane) 230.dp else 300.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 tonalElevation = 4.dp
             ) {
@@ -163,92 +162,53 @@ fun NowPlayingScreen(
                         demoWhenIdle = false,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(14.dp)
+                            .padding(16.dp)
                     )
 
                     if (track != null) {
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(14.dp)
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            FormatBadge(format = track.format)
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surface),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.MusicNote,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
+                            Icon(
+                                imageVector = Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            if (track.albumArtUri != null) {
+                                AsyncImage(
+                                    model = track.albumArtUri,
+                                    contentDescription = track.album,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.matchParentSize()
                                 )
-                                if (track.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = track.albumArtUri,
-                                        contentDescription = track.album,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.matchParentSize()
-                                    )
-                                }
                             }
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(VisualizerStyle.entries, key = { it.name }) { style ->
-                    FilterChip(
-                        selected = visualizerConfig.style == style,
-                        onClick = { viewModel.selectVisualizerStyle(style) },
-                        label = { Text(style.displayName) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(VisualizerColorScheme.entries, key = { it.name }) { scheme ->
-                    FilterChip(
-                        selected = visualizerConfig.colorScheme == scheme,
-                        onClick = { viewModel.selectVisualizerColorScheme(scheme) },
-                        label = { Text(scheme.displayName) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(28.dp))
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    text = track?.title ?: "No Track Selected",
+                    text = track?.title ?: "Ready to Play",
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (track != null) "${track.artist} • ${track.album}" else "Pick a track from Library or Playlists",
+                    text = if (track != null) "${track.artist} • ${track.album}" else "Pick a song to start",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -256,7 +216,7 @@ fun NowPlayingScreen(
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
             Slider(
                 value = displayedPositionMs.toFloat(),
@@ -289,7 +249,7 @@ fun NowPlayingScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -314,14 +274,14 @@ fun NowPlayingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.SkipPrevious,
-                        contentDescription = "Previous track",
+                        contentDescription = "Previous",
                         modifier = Modifier.size(34.dp)
                     )
                 }
 
                 FilledIconButton(
                     onClick = viewModel::togglePlayPause,
-                    modifier = Modifier.size(68.dp),
+                    modifier = Modifier.size(72.dp),
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -345,7 +305,7 @@ fun NowPlayingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.SkipNext,
-                        contentDescription = "Next track",
+                        contentDescription = "Next",
                         modifier = Modifier.size(34.dp)
                     )
                 }
@@ -357,7 +317,7 @@ fun NowPlayingScreen(
                         } else {
                             Icons.Rounded.Repeat
                         },
-                        contentDescription = "Repeat mode",
+                        contentDescription = "Repeat",
                         tint = if (playbackState.repeatMode != RepeatMode.OFF) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -371,6 +331,46 @@ fun NowPlayingScreen(
         }
     }
 
+    if (showVisualizerSheet) {
+        ModalBottomSheet(onDismissRequest = { showVisualizerSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Visualizer", style = MaterialTheme.typography.titleLarge)
+                Text("Style", style = MaterialTheme.typography.titleMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    VisualizerStyle.entries.forEach { style ->
+                        FilterChip(
+                            selected = visualizerConfig.style == style,
+                            onClick = { viewModel.selectVisualizerStyle(style) },
+                            label = { Text(style.displayName) }
+                        )
+                    }
+                }
+                Text("Colors", style = MaterialTheme.typography.titleMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    VisualizerColorScheme.entries.forEach { scheme ->
+                        FilterChip(
+                            selected = visualizerConfig.colorScheme == scheme,
+                            onClick = { viewModel.selectVisualizerColorScheme(scheme) },
+                            label = { Text(scheme.displayName) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+
     if (showQueueSheet) {
         ModalBottomSheet(onDismissRequest = { showQueueSheet = false }) {
             Column(
@@ -379,13 +379,13 @@ fun NowPlayingScreen(
                     .padding(horizontal = 16.dp)
             ) {
                 Text(
-                    text = "Playback Queue (${playbackState.queue.size})",
+                    text = "Up Next",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
                 if (playbackState.queue.isEmpty()) {
                     Text(
-                        text = "Queue is empty.",
+                        text = "Queue is empty",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 24.dp)

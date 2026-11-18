@@ -1,7 +1,5 @@
 package com.auraplayer.app.ui.screens.playlists
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,7 +19,6 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,13 +29,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,42 +52,14 @@ fun PlaylistsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     var showCreateDialog by remember { mutableStateOf(false) }
     var editingPlaylist by remember { mutableStateOf<Playlist?>(null) }
 
-    val importBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.importBackup(uri.toString())
-        }
-    }
-
-    LaunchedEffect(state.statusMessage) {
-        val msg = state.statusMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(msg)
-        viewModel.clearStatusMessage()
-    }
-
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Playlists", style = MaterialTheme.typography.titleLarge) },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            importBackupLauncher.launch(arrayOf("application/json", "*/*"))
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FileOpen,
-                            contentDescription = "Import playlist backup JSON"
-                        )
-                    }
-                }
+                title = { Text("Playlists", style = MaterialTheme.typography.titleLarge) }
             )
         },
         floatingActionButton = {
@@ -102,7 +68,7 @@ fun PlaylistsScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Create playlist")
+                Icon(Icons.Rounded.Add, contentDescription = "New playlist")
             }
         }
     ) { innerPadding ->
@@ -123,12 +89,6 @@ fun PlaylistsScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text("No playlists yet", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Create mood playlists, repeat tracks freely, drag-and-drop to reorder, or import an Aura Backup JSON.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         } else {
             LazyColumn(
@@ -186,18 +146,18 @@ fun PlaylistsScreen(
                                     )
                                 }
                                 Text(
-                                    text = "${playlist.trackCount} entries",
+                                    text = "${playlist.trackCount} songs",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             IconButton(onClick = { editingPlaylist = playlist }) {
-                                Icon(Icons.Rounded.Edit, contentDescription = "Edit playlist")
+                                Icon(Icons.Rounded.Edit, contentDescription = "Edit")
                             }
                             IconButton(onClick = { viewModel.deletePlaylist(playlist.id) }) {
                                 Icon(
                                     imageVector = Icons.Rounded.DeleteOutline,
-                                    contentDescription = "Delete playlist"
+                                    contentDescription = "Delete"
                                 )
                             }
                         }
@@ -253,14 +213,14 @@ private fun PlaylistEditorDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Playlist Name") },
+                    label = { Text("Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Mood or Notes (Optional)") },
+                    label = { Text("Description (optional)") },
                     maxLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )

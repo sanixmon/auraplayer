@@ -20,7 +20,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,14 +70,6 @@ fun PlaylistDetailScreen(
     var itemHeightPx by remember { mutableFloatStateOf(160f) }
     var showAddTracksSheet by remember { mutableStateOf(false) }
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        if (uri != null) {
-            viewModel.exportPlaylistToUri(uri.toString())
-        }
-    }
-
     var trackPendingRelocate by remember { mutableStateOf<Track?>(null) }
     val relocateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -115,7 +106,7 @@ fun PlaylistDetailScreen(
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "${localEntries.size} entries • Hold & drag to reorder",
+                            text = "${localEntries.size} songs",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -130,23 +121,10 @@ fun PlaylistDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            val slug = (state.playlist?.name ?: "playlist")
-                                .lowercase()
-                                .replace(Regex("[^a-z0-9]+"), "_")
-                            exportLauncher.launch("${slug}_aura_backup.json")
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.IosShare,
-                            contentDescription = "Export playlist JSON"
-                        )
-                    }
                     IconButton(onClick = { showAddTracksSheet = true }) {
                         Icon(
                             imageVector = Icons.Rounded.Add,
-                            contentDescription = "Add tracks"
+                            contentDescription = "Add songs"
                         )
                     }
                 }
@@ -166,14 +144,12 @@ fun PlaylistDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = {
-                            onPlayTracks(localEntries.map { it.track }, 0)
-                        },
+                        onClick = { onPlayTracks(localEntries.map { it.track }, 0) },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Play Playlist")
+                        Text("Play")
                     }
                     OutlinedButton(
                         onClick = { showAddTracksSheet = true },
@@ -181,7 +157,7 @@ fun PlaylistDetailScreen(
                     ) {
                         Icon(Icons.Rounded.Add, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Add Tracks")
+                        Text("Add Songs")
                     }
                 }
             }
@@ -195,18 +171,12 @@ fun PlaylistDetailScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "This playlist is empty",
+                        text = "Empty playlist",
                         style = MaterialTheme.typography.titleLarge
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Add tracks from your offline library (repeats allowed), then hold and drag to reorder.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = { showAddTracksSheet = true }) {
-                        Text("Add Tracks")
+                        Text("Add Songs")
                     }
                 }
             } else {
@@ -291,14 +261,14 @@ fun PlaylistDetailScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Rounded.DragHandle,
-                                        contentDescription = "Drag to reorder",
+                                        contentDescription = "Reorder",
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 4.dp)
                                     )
                                     IconButton(onClick = { viewModel.removeEntry(entry.entryId) }) {
                                         Icon(
                                             imageVector = Icons.Rounded.Close,
-                                            contentDescription = "Remove entry from playlist"
+                                            contentDescription = "Remove"
                                         )
                                     }
                                 }
@@ -318,13 +288,13 @@ fun PlaylistDetailScreen(
                     .padding(horizontal = 16.dp)
             ) {
                 Text(
-                    text = "Add Tracks to Playlist",
+                    text = "Add Songs",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
                 if (state.libraryTracks.isEmpty()) {
                     Text(
-                        text = "No available tracks in your Library yet.",
+                        text = "No songs in library yet.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 24.dp)
@@ -346,7 +316,7 @@ fun PlaylistDetailScreen(
                                     IconButton(onClick = { viewModel.addTrack(track.id) }) {
                                         Icon(
                                             imageVector = Icons.Rounded.Add,
-                                            contentDescription = "Add track"
+                                            contentDescription = "Add"
                                         )
                                     }
                                 }

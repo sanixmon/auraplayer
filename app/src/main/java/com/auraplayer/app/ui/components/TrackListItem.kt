@@ -45,7 +45,7 @@ fun TrackListItem(
     trailingContent: (@Composable () -> Unit)? = null
 ) {
     val bgColor = when {
-        !track.isAvailable -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        !track.isAvailable -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         else -> MaterialTheme.colorScheme.surface
     }
@@ -56,7 +56,7 @@ fun TrackListItem(
             .clip(RoundedCornerShape(14.dp))
             .background(bgColor)
             .clickable(enabled = track.isAvailable, onClick = onClick)
-            .alpha(if (track.isAvailable) 1f else 0.62f)
+            .alpha(if (track.isAvailable) 1f else 0.55f)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -95,7 +95,7 @@ fun TrackListItem(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = track.title,
@@ -108,33 +108,28 @@ fun TrackListItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FormatBadge(format = track.format)
-                if (!track.isAvailable) {
-                    Text(
-                        text = "Unavailable",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                Text(
-                    text = "${track.artist} • ${formatDurationMs(track.durationMs)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = if (track.isAvailable) {
+                    "${track.artist} • ${formatDurationMs(track.durationMs)}"
+                } else {
+                    "Missing • ${track.artist}"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (track.isAvailable) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         if (!track.isAvailable && onRelocateUnavailable != null) {
             IconButton(onClick = onRelocateUnavailable) {
                 Icon(
                     imageVector = Icons.Rounded.FindInPage,
-                    contentDescription = "Relocate missing track",
+                    contentDescription = "Locate file",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }

@@ -18,31 +18,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,7 +50,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +66,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
-import com.auraplayer.app.data.model.AudioFormat
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.repository.LibrarySortOrder
 import com.auraplayer.app.ui.components.TrackListItem
@@ -109,7 +102,7 @@ fun LibraryScreen(
     ) { grants ->
         hasAudioPermission = grants[audioPermission] == true
         if (hasAudioPermission) {
-            viewModel.syncLibrary()
+            viewModel.syncLibrary(silent = true)
         }
     }
 
@@ -129,20 +122,9 @@ fun LibraryScreen(
         }
     }
 
-    var trackPendingRelocate by remember { mutableStateOf<Track?>(null) }
-    val relocateLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        val target = trackPendingRelocate
-        if (uri != null && target != null) {
-            viewModel.relocateTrack(target.id, uri.toString())
-        }
-        trackPendingRelocate = null
-    }
-
     LaunchedEffect(hasAudioPermission) {
         if (hasAudioPermission && pagedTracks.itemCount == 0) {
-            viewModel.syncLibrary()
+            viewModel.syncLibrary(silent = true)
         }
     }
 
@@ -153,7 +135,7 @@ fun LibraryScreen(
     }
 
     var sortMenuExpanded by remember { mutableStateOf(false) }
-    var showExternalSourcesSheet by remember { mutableStateOf(false) }
+    var showAddSheet by remember { mutableStateOf(false) }
     var trackPendingPlaylist by remember { mutableStateOf<Track?>(null) }
 
     Scaffold(
@@ -163,26 +145,28 @@ fun LibraryScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Aura Library", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "${pagedTracks.itemCount} tracks • ${state.watchedFolders.size} watched folder(s)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Songs", style = MaterialTheme.typography.titleLarge)
+                        if (pagedTracks.itemCount > 0) {
+                            Text(
+                                text = "${pagedTracks.itemCount} songs",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showExternalSourcesSheet = true }) {
+                    IconButton(onClick = { showAddSheet = true }) {
                         Icon(
-                            imageVector = Icons.Rounded.FolderOpen,
-                            contentDescription = "External storage & watched folders"
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "Add music"
                         )
                     }
                     Box {
                         IconButton(onClick = { sortMenuExpanded = true }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.Sort,
-                                contentDescription = "Sort library"
+                                contentDescription = "Sort"
                             )
                         }
                         DropdownMenu(
@@ -211,7 +195,7 @@ fun LibraryScreen(
                     IconButton(
                         onClick = {
                             if (hasAudioPermission) {
-                                viewModel.syncLibrary()
+                                viewModel.syncLibrary(silent = false)
                             } else {
                                 val perms = buildList {
                                     add(audioPermission)
@@ -231,7 +215,7 @@ fun LibraryScreen(
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Refresh,
-                                contentDescription = "Run Library Scan"
+                                contentDescription = "Rescan"
                             )
                         }
                     }
@@ -247,14 +231,14 @@ fun LibraryScreen(
             OutlinedTextField(
                 value = state.searchQuery,
                 onValueChange = viewModel::onSearchQueryChange,
-                placeholder = { Text("Search tracks, artists, or albums") },
+                placeholder = { Text("Search songs, artists, albums") },
                 leadingIcon = {
                     Icon(Icons.Rounded.Search, contentDescription = null)
                 },
                 trailingIcon = {
                     if (state.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear")
                         }
                     }
                 },
@@ -264,63 +248,6 @@ fun LibraryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             )
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    FilterChip(
-                        selected = state.selectedFormat == null,
-                        onClick = { viewModel.onFormatFilterSelected(null) },
-                        label = { Text("All (${AudioFormat.supportedFormats.size})") }
-                    )
-                }
-                if (state.unavailableCount > 0) {
-                    item {
-                        FilterChip(
-                            selected = state.showUnavailable,
-                            onClick = viewModel::toggleShowUnavailable,
-                            label = { Text("Unavailable (${state.unavailableCount})") }
-                        )
-                    }
-                }
-                items(AudioFormat.supportedFormats, key = { it.name }) { format ->
-                    FilterChip(
-                        selected = state.selectedFormat == format,
-                        onClick = { viewModel.onFormatFilterSelected(format) },
-                        label = { Text(format.displayName) }
-                    )
-                }
-            }
-
-            if (state.showUnavailable && state.unavailableCount > 0) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${state.unavailableCount} missing track(s)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = viewModel::purgeUnavailableTracks) {
-                            Text("Purge All")
-                        }
-                    }
-                }
-            }
 
             if (pagedTracks.itemCount > 0) {
                 Row(
@@ -363,9 +290,7 @@ fun LibraryScreen(
             if (pagedTracks.itemCount == 0) {
                 EmptyLibraryState(
                     hasPermission = hasAudioPermission,
-                    hasFilter = state.searchQuery.isNotBlank() ||
-                        state.selectedFormat != null ||
-                        state.showUnavailable,
+                    hasFilter = state.searchQuery.isNotBlank(),
                     onRequestPermission = {
                         val perms = buildList {
                             add(audioPermission)
@@ -375,8 +300,7 @@ fun LibraryScreen(
                         }
                         permissionLauncher.launch(perms.toTypedArray())
                     },
-                    onImportSources = { showExternalSourcesSheet = true },
-                    onRescan = viewModel::syncLibrary,
+                    onAddMusic = { showAddSheet = true },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -405,11 +329,7 @@ fun LibraryScreen(
                                     onReady = onPlayTracks
                                 )
                             },
-                            onAddToPlaylist = { trackPendingPlaylist = track },
-                            onRelocateUnavailable = {
-                                trackPendingRelocate = track
-                                relocateLauncher.launch(arrayOf("audio/*"))
-                            }
+                            onAddToPlaylist = { trackPendingPlaylist = track }
                         )
                     }
                 }
@@ -417,52 +337,46 @@ fun LibraryScreen(
         }
     }
 
-    if (showExternalSourcesSheet) {
-        ModalBottomSheet(onDismissRequest = { showExternalSourcesSheet = false }) {
+    if (showAddSheet) {
+        ModalBottomSheet(onDismissRequest = { showAddSheet = false }) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("External Storage & Watched Folders", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = "Grant folders for automatic Library Scans or import individual audio files.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
+                Text("Add Music", style = MaterialTheme.typography.titleLarge)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
                         onClick = {
-                            showExternalSourcesSheet = false
+                            showAddSheet = false
                             watchedFolderLauncher.launch(null)
                         },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Watch Folder")
+                        Text("Add Folder")
                     }
                     OutlinedButton(
                         onClick = {
-                            showExternalSourcesSheet = false
+                            showAddSheet = false
                             externalAudioLauncher.launch(arrayOf("audio/*"))
                         },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Rounded.AudioFile, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Pick Files")
+                        Text("Add Files")
                     }
                 }
 
                 if (state.watchedFolders.isNotEmpty()) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    Text("Watched Folders", style = MaterialTheme.typography.titleMedium)
+                    HorizontalDivider()
+                    Text("Folders", style = MaterialTheme.typography.titleMedium)
                     state.watchedFolders.forEach { folder ->
                         ListItem(
                             headlineContent = { Text(folder.displayName) },
@@ -475,7 +389,7 @@ fun LibraryScreen(
                                 ) {
                                     Icon(
                                         Icons.Rounded.DeleteOutline,
-                                        contentDescription = "Remove watched folder"
+                                        contentDescription = "Remove folder"
                                     )
                                 }
                             }
@@ -495,17 +409,11 @@ fun LibraryScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "Add \"${selectedTrack.title}\" to playlist",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Add to playlist",
+                    style = MaterialTheme.typography.titleLarge
                 )
                 Spacer(Modifier.height(12.dp))
                 if (state.playlists.isEmpty()) {
-                    Text(
-                        text = "You don't have any playlists yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = {
                             trackPendingPlaylist = null
@@ -513,13 +421,13 @@ fun LibraryScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Create a Playlist")
+                        Text("New Playlist")
                     }
                 } else {
                     state.playlists.forEach { playlist ->
                         ListItem(
                             headlineContent = { Text(playlist.name) },
-                            supportingContent = { Text("${playlist.trackCount} tracks") },
+                            supportingContent = { Text("${playlist.trackCount} songs") },
                             leadingContent = {
                                 Icon(Icons.Rounded.AddCircleOutline, contentDescription = null)
                             },
@@ -547,8 +455,7 @@ private fun EmptyLibraryState(
     hasPermission: Boolean,
     hasFilter: Boolean,
     onRequestPermission: () -> Unit,
-    onImportSources: () -> Unit,
-    onRescan: () -> Unit,
+    onAddMusic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -565,40 +472,24 @@ private fun EmptyLibraryState(
         Spacer(Modifier.height(16.dp))
         Text(
             text = when {
-                hasFilter -> "No matching tracks"
-                !hasPermission -> "Access your offline music"
-                else -> "Your offline library is empty"
+                hasFilter -> "No matching songs"
+                !hasPermission -> "Find your music"
+                else -> "No songs yet"
             },
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = when {
-                hasFilter -> "Try clearing your search or format filter."
-                !hasPermission -> "Grant audio access to discover 20+ formats (MP3, FLAC, WAV, ALAC, WMA, APE, OPUS, OGG, and more) stored locally."
-                else -> "Run a Library Scan or watch an external folder / SD card."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
         if (!hasPermission && !hasFilter) {
             Button(onClick = onRequestPermission) {
-                Text("Grant Audio Permission")
+                Text("Allow Music Access")
             }
-            Spacer(Modifier.height(10.dp))
-        } else if (!hasFilter) {
-            Button(onClick = onRescan) {
-                Text("Run Library Scan")
-            }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
         }
-        OutlinedButton(onClick = onImportSources) {
-            Icon(Icons.Rounded.FolderOpen, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Watch Folder / Import Files")
+        if (!hasFilter) {
+            OutlinedButton(onClick = onAddMusic) {
+                Text("Add Folder or Files")
+            }
         }
     }
 }

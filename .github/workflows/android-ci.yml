@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build FFmpeg (LGPL), Unit Test, Lint & APK
+    name: Build FFmpeg (LGPL), Unit Test, Lint & arm64-v8a APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -75,26 +75,37 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Prepare Release Signing Keystore (when configured)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+          echo "RELEASE_KEYSTORE_PATH=${RUNNER_TEMP}/release.jks" >> "$GITHUB_ENV"
+          echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> "$GITHUB_ENV"
+
       - name: Run Unit Tests
         run: gradle testDebugUnitTest --stacktrace
 
       - name: Run Android Lint
         run: gradle lintDebug --stacktrace
 
-      - name: Build Debug APK
+      - name: Build arm64-v8a Debug APK
         run: gradle assembleDebug --stacktrace
 
-      - name: Build Unsigned Release APK (R8 & Resource Shrinking Check)
+      - name: Build Signed arm64-v8a Release APK
         run: gradle assembleRelease --stacktrace
 
-      - name: Upload Debug & Release APKs
+      - name: Upload arm64-v8a Debug & Release APKs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aura-player-apks
+          name: aura-player-arm64-v8a-apks
           path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*arm64-v8a*.apk
+            app/build/outputs/apk/release/*arm64-v8a*.apk
           if-no-files-found: warn
 
       - name: Upload Test & Lint Reports

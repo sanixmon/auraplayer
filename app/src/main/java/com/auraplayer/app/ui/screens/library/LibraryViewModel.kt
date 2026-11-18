@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.auraplayer.app.data.model.AudioFormat
 import com.auraplayer.app.data.model.Playlist
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.WatchedFolder
@@ -25,20 +24,10 @@ import kotlinx.coroutines.launch
 data class LibraryUiState(
     val playlists: List<Playlist> = emptyList(),
     val watchedFolders: List<WatchedFolder> = emptyList(),
-    val unavailableCount: Int = 0,
     val searchQuery: String = "",
-    val selectedFormat: AudioFormat? = null,
     val sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE,
-    val showUnavailable: Boolean = false,
     val isScanning: Boolean = false,
     val statusMessage: String? = null
-)
-
-private data class LibraryQueryParams(
-    val query: String,
-    val format: AudioFormat?,
-    val sortOrder: LibrarySortOrder,
-    val includeUnavailable: Boolean
 )
 
 class LibraryViewModel(
@@ -47,53 +36,34 @@ class LibraryViewModel(
 ) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
-    private val selectedFormat = MutableStateFlow<AudioFormat?>(null)
     private val sortOrder = MutableStateFlow(LibrarySortOrder.TITLE)
-    private val showUnavailable = MutableStateFlow(false)
     private val isScanning = MutableStateFlow(false)
     private val statusMessage = MutableStateFlow<String?>(null)
 
-    private val queryParams = combine(
-        searchQuery,
-        selectedFormat,
-        sortOrder,
-        showUnavailable
-    ) { query, format, sort, includeUnavailable ->
-        LibraryQueryParams(
-            query = query,
-            format = format,
-            sortOrder = sort,
-            includeUnavailable = includeUnavailable
-        )
-    }
-
     @OptIn(ExperimentalCoroutinesApi::class)
-    val pagedTracks: Flow<PagingData<Track>> = queryParams
-        .flatMapLatest { params ->
-            musicRepository.observePagedTracks(
-                query = params.query,
-                formatFilter = params.format,
-                sortOrder = params.sortOrder,
-                includeUnavailable = params.includeUnavailable
-            )
-        }
-        .cachedIn(viewModelScope)
+    val pagedTracks: Flow<PagingData<Track>> = combine(searchQuery, sortOrder) { q, sort ->
+        q to sort
+    }.flatMapLatest { (query, sort) ->
+        musicRepository.observePagedTracks(
+            query = query,
+            formatFilter = null,
+            sortOrder = sort,
+            includeUnavailable = false
+        )
+    }.cachedIn(viewModelScope)
 
     val uiState: StateFlow<LibraryUiState> = combine(
         playlistRepository.observePlaylists(),
         musicRepository.observeWatchedFolders(),
-        musicRepository.observeUnavailableCount(),
-        queryParams,
+        searchQuery,
+        sortOrder,
         combine(isScanning, statusMessage) { scanning, msg -> scanning to msg }
-    ) { playlists, folders, unavailableCount, params, (scanning, message) ->
+    ) { playlists, folders, query, sort, (scanning, message) ->
         LibraryUiState(
             playlists = playlists,
             watchedFolders = folders,
-            unavailableCount = unavailableCount,
-            searchQuery = params.query,
-            selectedFormat = params.format,
-            sortOrder = params.sortOrder,
-            showUnavailable = params.includeUnavailable,
+            searchQuery = query,
+            sortOrder = sort,
             isScanning = scanning,
             statusMessage = message
         )
@@ -107,26 +77,20 @@ class LibraryViewModel(
         searchQuery.value = query
     }
 
-    fun onFormatFilterSelected(format: AudioFormat?) {
-        selectedFormat.value = if (selectedFormat.value == format) null else format
-    }
-
     fun onSortOrderSelected(order: LibrarySortOrder) {
         sortOrder.value = order
     }
 
-    fun toggleShowUnavailable() {
-        showUnavailable.value = !showUnavailable.value
-    }
-
-    fun syncLibrary() {
+    fun syncLibrary(silent: Boolean = true) {
         if (isScanning.value) return
         viewModelScope.launch {
             isScanning.value = true
             runCatching {
                 musicRepository.syncDeviceLibrary()
             }.onSuccess { count ->
-                statusMessage.value = "Library scan complete: $count available tracks"
+                if (!silent) {
+                    statusMessage.value = "$count songs found"
+                }
             }.onFailure { err ->
                 statusMessage.value = "Scan failed: ${err.message ?: "Unknown error"}"
             }
@@ -140,13 +104,11 @@ class LibraryViewModel(
             runCatching {
                 musicRepository.addWatchedFolder(treeUriString)
             }.onSuccess { added ->
-                statusMessage.value = if (added) {
-                    "Added watched folder and scanned audio"
-                } else {
-                    "Could not read selected folder"
+                if (!added) {
+                    statusMessage.value = "Could not open folder"
                 }
             }.onFailure { err ->
-                statusMessage.value = "Folder grant failed: ${err.message ?: "Unknown error"}"
+                statusMessage.value = "Folder error: ${err.message ?: "Unknown error"}"
             }
             isScanning.value = false
         }
@@ -155,7 +117,6 @@ class LibraryViewModel(
     fun removeWatchedFolder(treeUriString: String) {
         viewModelScope.launch {
             musicRepository.removeWatchedFolder(treeUriString)
-            statusMessage.value = "Removed watched folder"
         }
     }
 
@@ -167,29 +128,14 @@ class LibraryViewModel(
                 musicRepository.importExternalFiles(uriStrings)
             }.onSuccess { added ->
                 statusMessage.value = if (added > 0) {
-                    "Imported $added track(s) from storage"
+                    "Added $added song(s)"
                 } else {
-                    "Selected track(s) already in library"
+                    "Already in library"
                 }
             }.onFailure { err ->
                 statusMessage.value = "Import failed: ${err.message ?: "Unknown error"}"
             }
             isScanning.value = false
-        }
-    }
-
-    fun relocateTrack(trackId: Long, newUriString: String) {
-        viewModelScope.launch {
-            val ok = musicRepository.relocateTrack(trackId, newUriString)
-            statusMessage.value = if (ok) "Track relinked" else "Failed to relink track"
-        }
-    }
-
-    fun purgeUnavailableTracks() {
-        viewModelScope.launch {
-            val removed = musicRepository.purgeUnavailableTracks()
-            showUnavailable.value = false
-            statusMessage.value = "Cleaned up $removed unavailable track(s)"
         }
     }
 
@@ -208,13 +154,10 @@ class LibraryViewModel(
         viewModelScope.launch {
             val playable = musicRepository.getPlayableTracks(
                 query = searchQuery.value,
-                formatFilter = selectedFormat.value,
+                formatFilter = null,
                 sortOrder = sortOrder.value
             )
-            if (playable.isEmpty()) {
-                statusMessage.value = "No available tracks to play"
-                return@launch
-            }
+            if (playable.isEmpty()) return@launch
             if (shuffle) {
                 onReady(playable.shuffled(), 0)
             } else {
