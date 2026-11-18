@@ -41,7 +41,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm
           SDKMANAGER=$(command -v sdkmanager || ls "${ANDROID_HOME}"/cmdline-tools/*/bin/sdkmanager | head -n 1)
+          set +o pipefail
           yes | "${SDKMANAGER}" "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
+          set -o pipefail
 
           WORK_DIR="${RUNNER_TEMP}/media3-ffmpeg"
           rm -rf "${WORK_DIR}"
