@@ -156,8 +156,7 @@ fun SettingsScreen(
                         Text("App Color", style = MaterialTheme.typography.titleMedium)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            itemVerticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             FilterChip(
                                 selected = config.accentMode == AppAccentMode.DYNAMIC_ALBUM,
@@ -191,6 +190,7 @@ fun SettingsScreen(
                                     config.customAppSecondaryArgb == preset.secondaryHex
                                 Box(
                                     modifier = Modifier
+                                        .align(Alignment.CenterVertically)
                                         .size(30.dp)
                                         .clip(CircleShape)
                                         .background(

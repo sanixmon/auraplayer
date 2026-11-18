@@ -9,12 +9,14 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
- * Pure-Kotlin Radix-2 FFT spectrum and waveform analyzer for offline PCM audio buffers.
+ * Pure-Kotlin Radix-2 FFT spectrum and waveform analyzer with perceptual frequency tilt,
+ * automatic gain control (AGC), and transient beat-onset detection.
  */
 class AudioSpectrumAnalyzer(
-    private val fftSize: Int = 512,
+    private val fftSize: Int = 1024,
     private val waveformPoints: Int = 64
 ) {
     init {
@@ -34,10 +36,18 @@ class AudioSpectrumAnalyzer(
     private val imag = FloatArray(fftSize)
     private val magnitudes = FloatArray(fftSize / 2)
 
+    private var agcPeak = 0.25f
+    private var bassMovingAvg = 0.1f
+
+    fun reset() {
+        agcPeak = 0.25f
+        bassMovingAvg = 0.1f
+    }
+
     fun analyze(
         monoSamples: FloatArray,
         sampleCount: Int = monoSamples.size,
-        bandCount: Int = 48
+        bandCount: Int = 64
     ): VisualizerFrame {
         if (sampleCount <= 0 || monoSamples.isEmpty()) {
             return VisualizerFrame.EMPTY
@@ -55,7 +65,7 @@ class AudioSpectrumAnalyzer(
             imag[i] = 0f
         }
 
-        val rms = kotlin.math.sqrt(sumSquares / max(1, min(count, fftSize))).toFloat().coerceIn(0f, 1f)
+        val rms = sqrt(sumSquares / max(1, min(count, fftSize))).toFloat().coerceIn(0f, 1f)
 
         fft(real, imag)
 
@@ -63,21 +73,32 @@ class AudioSpectrumAnalyzer(
         val scale = 2.0f / fftSize
         for (i in 0 until halfSize) {
             val mag = hypot(real[i], imag[i]) * scale
-            // Convert magnitude to a perceptually compressed 0..1 curve.
-            val dbScaled = (ln(1.0 + mag * 32.0) / ln(33.0)).toFloat()
+            val dbScaled = (ln(1.0 + mag * 48.0) / ln(49.0)).toFloat()
             magnitudes[i] = dbScaled.coerceIn(0f, 1f)
         }
 
         val safeBandCount = bandCount.coerceIn(4, 128)
-        val bands = groupIntoLogBands(magnitudes, safeBandCount)
+        val rawBands = groupIntoLogBandsWithTilt(magnitudes, safeBandCount)
+
+        // Short-term AGC keeps quiet acoustic tracks lively and loud EDM tracks unclipped.
+        val framePeak = rawBands.maxOrNull() ?: 0f
+        agcPeak = max(0.08f, max(framePeak, agcPeak * 0.992f))
+        val agcScale = (0.92f / agcPeak).coerceIn(0.6f, 4.5f)
+
+        val bands = rawBands.map { (it * agcScale).coerceIn(0f, 1f) }
         val waveform = downsampleWaveform(monoSamples, count, waveformPoints)
 
-        val bassEnd = max(1, (safeBandCount * 0.2f).toInt())
-        val midEnd = max(bassEnd + 1, (safeBandCount * 0.6f).toInt())
+        val bassEnd = max(1, (safeBandCount * 0.18f).toInt())
+        val midEnd = max(bassEnd + 1, (safeBandCount * 0.58f).toInt())
 
         val bassEnergy = averageRange(bands, 0, bassEnd)
         val midEnergy = averageRange(bands, bassEnd, midEnd)
         val trebleEnergy = averageRange(bands, midEnd, bands.size)
+
+        // Detect bass kick / transient onset above rolling bass average.
+        val onsetDelta = (bassEnergy - bassMovingAvg * 1.18f).coerceAtLeast(0f)
+        bassMovingAvg = bassMovingAvg * 0.88f + bassEnergy * 0.12f
+        val beatPulse = (onsetDelta * 3.8f).coerceIn(0f, 1f)
 
         return VisualizerFrame(
             spectrumBands = bands,
@@ -85,11 +106,12 @@ class AudioSpectrumAnalyzer(
             bassEnergy = bassEnergy,
             midEnergy = midEnergy,
             trebleEnergy = trebleEnergy,
-            rmsLevel = rms
+            rmsLevel = rms,
+            beatPulse = beatPulse
         )
     }
 
-    private fun groupIntoLogBands(bins: FloatArray, bandCount: Int): List<Float> {
+    private fun groupIntoLogBandsWithTilt(bins: FloatArray, bandCount: Int): List<Float> {
         val result = ArrayList<Float>(bandCount)
         val usableBins = bins.size - 1
         if (usableBins <= 1) {
@@ -108,11 +130,19 @@ class AudioSpectrumAnalyzer(
                 startBin,
                 (minIndex * (maxIndex / minIndex).pow(t1)).toInt().coerceIn(startBin, usableBins)
             )
+            var sum = 0f
             var peak = 0f
             for (b in startBin..endBin) {
-                if (bins[b] > peak) peak = bins[b]
+                val v = bins[b]
+                sum += v
+                if (v > peak) peak = v
             }
-            result += peak.coerceIn(0f, 1f)
+            val avg = sum / (endBin - startBin + 1)
+            val combined = peak * 0.65f + avg * 0.35f
+            // Perceptual treble compensation so mid & high bands stay responsive alongside bass.
+            val freqNorm = band.toFloat() / max(1, bandCount - 1)
+            val tiltBoost = 1.0f + 1.85f * freqNorm.pow(0.85f)
+            result += (combined * tiltBoost).coerceIn(0f, 1f)
         }
         return result
     }

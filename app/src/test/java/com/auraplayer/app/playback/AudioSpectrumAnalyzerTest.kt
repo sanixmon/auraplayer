@@ -50,4 +50,26 @@ class AudioSpectrumAnalyzerTest {
         assertTrue(lowFrame.spectrumBands.all { it in 0f..1f })
         assertTrue(lowFrame.waveform.all { it in -1f..1f })
     }
+
+    @Test
+    fun `loud bass onset after silence triggers beatPulse and reset clears rolling state`() {
+        val localAnalyzer = AudioSpectrumAnalyzer(fftSize = 512, waveformPoints = 64)
+        val silence = FloatArray(512) { 0f }
+        repeat(6) {
+            val frame = localAnalyzer.analyze(silence, bandCount = 48)
+            assertEquals(0f, frame.beatPulse, 0.0001f)
+        }
+
+        val sampleRate = 44100.0
+        val kick = FloatArray(512) { i ->
+            (0.85 * sin(2.0 * PI * 100.0 * i / sampleRate)).toFloat()
+        }
+        val onsetFrame = localAnalyzer.analyze(kick, bandCount = 48)
+        assertTrue("Expected noticeable beatPulse on bass kick, got ${onsetFrame.beatPulse}", onsetFrame.beatPulse > 0.3f)
+
+        // Reset restores initial moving baseline; silence produces zero beatPulse again.
+        localAnalyzer.reset()
+        val afterReset = localAnalyzer.analyze(silence, bandCount = 48)
+        assertEquals(0f, afterReset.beatPulse, 0.0001f)
+    }
 }
