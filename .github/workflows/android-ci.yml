@@ -24,6 +24,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Restore cached LGPL Media3 FFmpeg AAR
         id: cache-ffmpeg
@@ -38,7 +40,8 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y nasm
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
+          SDKMANAGER=$(command -v sdkmanager || ls "${ANDROID_HOME}"/cmdline-tools/*/bin/sdkmanager | head -n 1)
+          yes | "${SDKMANAGER}" "ndk;26.1.10909125" "cmake;3.22.1" >/dev/null
 
           WORK_DIR="${RUNNER_TEMP}/media3-ffmpeg"
           rm -rf "${WORK_DIR}"
