@@ -58,7 +58,7 @@ class LibraryViewModelTest {
         viewModel.uiState.test {
             awaitItem()
             viewModel.syncLibrary(silent = true)
-            assertNull(expectMostRecentItem().statusMessage)
+            assertNull(viewModel.uiState.value.statusMessage)
 
             viewModel.syncLibrary(silent = false)
             assertEquals("14 songs found", expectMostRecentItem().statusMessage)
