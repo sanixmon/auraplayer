@@ -62,6 +62,8 @@ class AudioSpectrumAnalyzer(
     private val normalizedBands = FloatArray(MAX_BANDS)
     private val prevPreAgcBass = FloatArray(MAX_BANDS)
     private val waveformScratch = FloatArray(waveformPoints)
+    private val waveformMaxScratch = FloatArray(waveformPoints)
+    private val waveformMinScratch = FloatArray(waveformPoints)
 
     private val bandLowHz = DoubleArray(MAX_BANDS)
     private val bandHighHz = DoubleArray(MAX_BANDS)
@@ -135,9 +137,13 @@ class AudioSpectrumAnalyzer(
             updateBeatAndBpm(avgFlux = 0f, timestampMs = timestampMs, dt = dt)
             val zeroBands = List(safeBandCount) { 0f }
             val waveList = waveformScratch.toList()
+            val waveMaxList = waveformMaxScratch.toList()
+            val waveMinList = waveformMinScratch.toList()
             return VisualizerFrame(
                 spectrumBands = zeroBands,
                 waveform = waveList,
+                waveformMax = waveMaxList,
+                waveformMin = waveMinList,
                 bassEnergy = 0f,
                 midEnergy = 0f,
                 trebleEnergy = 0f,
@@ -267,10 +273,14 @@ class AudioSpectrumAnalyzer(
 
         val bandsOut = List(safeBandCount) { i -> normalizedBands[i] }
         val waveOut = List(waveformPoints) { i -> waveformScratch[i] }
+        val waveMaxOut = List(waveformPoints) { i -> waveformMaxScratch[i] }
+        val waveMinOut = List(waveformPoints) { i -> waveformMinScratch[i] }
 
         return VisualizerFrame(
             spectrumBands = bandsOut,
             waveform = waveOut,
+            waveformMax = waveMaxOut,
+            waveformMin = waveMinOut,
             bassEnergy = bassEnergy,
             midEnergy = midEnergy,
             trebleEnergy = trebleEnergy,
@@ -434,22 +444,25 @@ class AudioSpectrumAnalyzer(
     private fun downsampleWaveformMinMax(samples: FloatArray, sampleCount: Int) {
         val window = min(sampleCount, detailFftSize)
         val startOffset = sampleCount - window
-        val bucketCount = waveformPoints / 2
-        val samplesPerBucket = window.toFloat() / bucketCount
+        val samplesPerBucket = window.toFloat() / waveformPoints
 
-        for (b in 0 until bucketCount) {
+        for (b in 0 until waveformPoints) {
             val bStart = startOffset + (b * samplesPerBucket).toInt().coerceIn(0, window - 1)
             val bEnd = startOffset + max(bStart - startOffset + 1, ((b + 1) * samplesPerBucket).toInt())
                 .coerceIn(1, window)
             var segMin = 1f
             var segMax = -1f
+            var segSum = 0f
             for (idx in bStart until bEnd) {
                 val v = samples[idx].coerceIn(-1f, 1f)
                 if (v < segMin) segMin = v
                 if (v > segMax) segMax = v
+                segSum += v
             }
-            waveformScratch[b * 2] = segMax
-            waveformScratch[b * 2 + 1] = segMin
+            val countInSeg = max(1, bEnd - bStart)
+            waveformScratch[b] = (segSum / countInSeg).coerceIn(-1f, 1f)
+            waveformMaxScratch[b] = segMax
+            waveformMinScratch[b] = segMin
         }
     }
 

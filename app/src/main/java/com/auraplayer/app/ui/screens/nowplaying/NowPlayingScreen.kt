@@ -7,9 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -17,8 +19,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,13 +63,13 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -75,13 +79,20 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -104,6 +115,8 @@ import com.auraplayer.app.ui.components.TrackListItem
 import com.auraplayer.app.ui.components.VisualizerCanvas
 import com.auraplayer.app.ui.util.formatDurationMs
 import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -451,6 +464,10 @@ fun NowPlayingScreen(
                             style = visualizerConfig.coverArtStyle,
                             isPlaying = playbackState.isPlaying,
                             bassEnergy = visualizerFrame.bassEnergy,
+                            beatPulse = visualizerFrame.beatPulse,
+                            sensitivity = visualizerConfig.sensitivity,
+                            syncOffsetMs = visualizerConfig.syncOffsetMs,
+                            visualizerBus = viewModel.visualizerBus,
                             size = animatedCoverSize
                         )
                     } else {
@@ -520,29 +537,50 @@ fun NowPlayingScreen(
                     }
                 }
 
-                // Full interactive scrubber + transport controls when HUD is awake
+                // Full interactive M3 Expressive wavy scrubber + morphing transport controls
                 AnimatedVisibility(
                     visible = !isFullscreenIdle,
                     enter = fadeIn(tween(340)) + expandVertically(tween(340)),
                     exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
                 ) {
-                    Column {
-                        Spacer(Modifier.height(12.dp))
+                    val expressiveSpring = spring<androidx.compose.ui.unit.Dp>(
+                        dampingRatio = 0.65f,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                    val playCorner by animateDpAsState(
+                        targetValue = if (playbackState.isPlaying) 22.dp else 36.dp,
+                        animationSpec = expressiveSpring,
+                        label = "expressive_play_corner"
+                    )
+                    val playWidth by animateDpAsState(
+                        targetValue = if (playbackState.isPlaying) 88.dp else 72.dp,
+                        animationSpec = expressiveSpring,
+                        label = "expressive_play_width"
+                    )
 
-                        Slider(
-                            value = displayedPositionMs.toFloat(),
-                            onValueChange = { value ->
+                    Column {
+                        Spacer(Modifier.height(14.dp))
+
+                        ExpressiveWavyScrubber(
+                            progress = progressFraction,
+                            isPlaying = playbackState.isPlaying,
+                            isScrubbing = isScrubbing,
+                            enabled = track != null,
+                            activeColor = accent,
+                            secondaryColor = secondary,
+                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
+                            onScrub = { newFraction ->
                                 isScrubbing = true
-                                scrubPositionMs = value
+                                scrubPositionMs = (newFraction * durationMs.toFloat()).coerceIn(0f, durationMs.toFloat())
                             },
-                            onValueChangeFinished = {
+                            onScrubFinished = {
                                 viewModel.seekTo(scrubPositionMs.toLong())
                                 isScrubbing = false
                             },
-                            valueRange = 0f..durationMs.toFloat(),
-                            enabled = track != null,
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        Spacer(Modifier.height(4.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -560,40 +598,54 @@ fun NowPlayingScreen(
                             )
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(16.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = viewModel::toggleShuffle) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Shuffle,
-                                    contentDescription = "Shuffle",
-                                    tint = if (playbackState.shuffleEnabled) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
+                            if (playbackState.shuffleEnabled) {
+                                FilledTonalIconButton(
+                                    onClick = viewModel::toggleShuffle,
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(imageVector = Icons.Rounded.Shuffle, contentDescription = "Shuffle")
+                                }
+                            } else {
+                                IconButton(onClick = viewModel::toggleShuffle) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Shuffle,
+                                        contentDescription = "Shuffle",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
 
-                            IconButton(
+                            FilledTonalIconButton(
                                 onClick = viewModel::skipPrevious,
-                                modifier = Modifier.size(52.dp)
+                                modifier = Modifier.size(width = 58.dp, height = 54.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.SkipPrevious,
                                     contentDescription = "Previous",
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
 
                             FilledIconButton(
                                 onClick = viewModel::togglePlayPause,
-                                modifier = Modifier.size(72.dp),
-                                shape = CircleShape,
+                                modifier = Modifier.size(width = playWidth, height = 70.dp),
+                                shape = RoundedCornerShape(playCorner),
                                 colors = IconButtonDefaults.filledIconButtonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -610,31 +662,48 @@ fun NowPlayingScreen(
                                 )
                             }
 
-                            IconButton(
+                            FilledTonalIconButton(
                                 onClick = viewModel::skipNext,
-                                modifier = Modifier.size(52.dp)
+                                modifier = Modifier.size(width = 58.dp, height = 54.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.SkipNext,
                                     contentDescription = "Next",
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
 
-                            IconButton(onClick = viewModel::cycleRepeatMode) {
-                                Icon(
-                                    imageVector = if (playbackState.repeatMode == RepeatMode.ONE) {
-                                        Icons.Rounded.RepeatOne
-                                    } else {
-                                        Icons.Rounded.Repeat
-                                    },
-                                    contentDescription = "Repeat",
-                                    tint = if (playbackState.repeatMode != RepeatMode.OFF) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
+                            if (playbackState.repeatMode != RepeatMode.OFF) {
+                                FilledTonalIconButton(
+                                    onClick = viewModel::cycleRepeatMode,
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (playbackState.repeatMode == RepeatMode.ONE) {
+                                            Icons.Rounded.RepeatOne
+                                        } else {
+                                            Icons.Rounded.Repeat
+                                        },
+                                        contentDescription = "Repeat"
+                                    )
+                                }
+                            } else {
+                                IconButton(onClick = viewModel::cycleRepeatMode) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Repeat,
+                                        contentDescription = "Repeat",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -780,4 +849,147 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+/**
+ * Material 3 Expressive wavy playback scrubber with animating active wave crest while playing
+ * and spring-animated pill thumb.
+ */
+@Composable
+private fun ExpressiveWavyScrubber(
+    progress: Float,
+    isPlaying: Boolean,
+    isScrubbing: Boolean,
+    enabled: Boolean,
+    activeColor: Color,
+    secondaryColor: Color,
+    trackColor: Color,
+    onScrub: (Float) -> Unit,
+    onScrubFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var wavePhase by remember { mutableFloatStateOf(0f) }
+    val waveAmplitude by animateDpAsState(
+        targetValue = if (isPlaying && !isScrubbing) 2.8.dp else 0.dp,
+        animationSpec = tween(260),
+        label = "scrubber_wave_amp"
+    )
+    val thumbHeight by animateDpAsState(
+        targetValue = if (isScrubbing) 24.dp else 18.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+        label = "scrubber_thumb_h"
+    )
+    val latestOnScrub by rememberUpdatedState(onScrub)
+    val latestOnFinished by rememberUpdatedState(onScrubFinished)
+    val wavePath = remember { Path() }
+
+    LaunchedEffect(isPlaying, isScrubbing) {
+        if (isPlaying && !isScrubbing) {
+            var lastNanos = 0L
+            while (true) {
+                withFrameNanos { now ->
+                    if (lastNanos != 0L) {
+                        val dt = ((now - lastNanos) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+                        wavePhase = (wavePhase + dt * 5.2f) % (2f * PI.toFloat())
+                    }
+                    lastNanos = now
+                }
+            }
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .height(34.dp)
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { offset ->
+                    val fraction = (offset.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                    latestOnScrub(fraction)
+                    latestOnFinished()
+                }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        val fraction = (offset.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        latestOnScrub(fraction)
+                    },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        val fraction = (change.position.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        latestOnScrub(fraction)
+                    },
+                    onDragEnd = { latestOnFinished() },
+                    onDragCancel = { latestOnFinished() }
+                )
+            }
+    ) {
+        val cy = size.height / 2f
+        val thumbW = (if (isScrubbing) 5.5f else 4f) * density
+        val thumbH = thumbHeight.toPx()
+        val usableW = (size.width - thumbW).coerceAtLeast(1f)
+        val thumbX = (thumbW / 2f) + progress.coerceIn(0f, 1f) * usableW
+        val strokePx = 3.6f * density
+        val ampPx = waveAmplitude.toPx()
+        val waveLengthPx = 24f * density
+
+        // Inactive track right of thumb
+        val inactiveStart = (thumbX + thumbW * 0.9f).coerceAtMost(size.width)
+        if (inactiveStart < size.width) {
+            drawLine(
+                color = trackColor,
+                start = Offset(inactiveStart, cy),
+                end = Offset(size.width, cy),
+                strokeWidth = 3.2f * density,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // Expressive wavy played portion left of thumb
+        val activeEnd = (thumbX - thumbW * 0.8f).coerceAtLeast(0f)
+        if (activeEnd > 1f) {
+            if (ampPx > 0.25f) {
+                wavePath.reset()
+                val step = 4f * density
+                var x = 0f
+                var first = true
+                while (x <= activeEnd) {
+                    val y = cy + sin((x / waveLengthPx) * (2f * PI.toFloat()) - wavePhase) * ampPx
+                    if (first) {
+                        wavePath.moveTo(x, y)
+                        first = false
+                    } else {
+                        wavePath.lineTo(x, y)
+                    }
+                    x += step
+                }
+                val endY = cy + sin((activeEnd / waveLengthPx) * (2f * PI.toFloat()) - wavePhase) * ampPx
+                wavePath.lineTo(activeEnd, endY)
+
+                drawPath(
+                    path = wavePath,
+                    brush = Brush.horizontalGradient(listOf(activeColor, secondaryColor)),
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+            } else {
+                drawLine(
+                    brush = Brush.horizontalGradient(listOf(activeColor, secondaryColor)),
+                    start = Offset(0f, cy),
+                    end = Offset(activeEnd, cy),
+                    strokeWidth = strokePx,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        // Tall vertical pill thumb
+        drawRoundRect(
+            color = activeColor,
+            topLeft = Offset(thumbX - thumbW / 2f, cy - thumbH / 2f),
+            size = Size(thumbW, thumbH),
+            cornerRadius = CornerRadius(thumbW / 2f, thumbW / 2f)
+        )
+    }
 }

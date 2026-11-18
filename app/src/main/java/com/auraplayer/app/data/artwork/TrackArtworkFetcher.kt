@@ -41,7 +41,32 @@ class TrackArtworkFetcher(
     override suspend fun fetch(): FetchResult? {
         val resolver = options.context.contentResolver
 
-        // 1. Try MediaStore album art URI first
+        // 1. Prefer embedded artwork inside the audio file itself so tracks in a shared
+        // MediaStore folder/album bucket don't collide onto a stale cached thumbnail.
+        if (!data.trackUri.startsWith("unavailable://")) {
+            val retriever = MediaMetadataRetriever()
+            val embeddedBytes = try {
+                retriever.setDataSource(options.context, Uri.parse(data.trackUri))
+                retriever.embeddedPicture
+            } catch (_: Exception) {
+                null
+            } finally {
+                runCatching { retriever.release() }
+            }
+
+            if (embeddedBytes != null && embeddedBytes.isNotEmpty()) {
+                return SourceResult(
+                    source = ImageSource(
+                        source = Buffer().write(embeddedBytes),
+                        context = options.context
+                    ),
+                    mimeType = null,
+                    dataSource = DataSource.DISK
+                )
+            }
+        }
+
+        // 2. Fallback to MediaStore album art URI if the track has no embedded image
         val mediaStoreArt = data.albumArtUri
         if (!mediaStoreArt.isNullOrBlank()) {
             val bytes = runCatching {
@@ -57,30 +82,6 @@ class TrackArtworkFetcher(
                     dataSource = DataSource.DISK
                 )
             }
-        }
-
-        // 2. Fallback to embedded picture inside the audio file itself
-        if (data.trackUri.startsWith("unavailable://")) return null
-
-        val retriever = MediaMetadataRetriever()
-        val embeddedBytes = try {
-            retriever.setDataSource(options.context, Uri.parse(data.trackUri))
-            retriever.embeddedPicture
-        } catch (_: Exception) {
-            null
-        } finally {
-            runCatching { retriever.release() }
-        }
-
-        if (embeddedBytes != null && embeddedBytes.isNotEmpty()) {
-            return SourceResult(
-                source = ImageSource(
-                    source = Buffer().write(embeddedBytes),
-                    context = options.context
-                ),
-                mimeType = null,
-                dataSource = DataSource.DISK
-            )
         }
 
         return null

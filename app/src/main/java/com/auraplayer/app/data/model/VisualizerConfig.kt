@@ -10,7 +10,8 @@ enum class VisualizerStyle(val displayName: String) {
 
 enum class VisualizerFillMode(val displayName: String) {
     LINE("Line"),
-    SOLID("Solid")
+    SOLID("Solid"),
+    NONE("None")
 }
 
 enum class VisualizerColorScheme(val displayName: String) {

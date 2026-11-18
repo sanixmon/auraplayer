@@ -54,9 +54,11 @@ class AudioSpectrumAnalyzerTest {
         assertTrue("Expected higher treble than bass for 9kHz sine", highFrame.trebleEnergy > highFrame.bassEnergy)
         assertTrue(lowFrame.spectrumBands.all { it in 0f..1f })
         assertTrue(lowFrame.waveform.all { it in -1f..1f })
-        // Min/max envelope preserves both positive peaks and negative troughs
+        // Smooth waveform & min/max envelope preserve both positive peaks and negative troughs
         assertTrue(lowFrame.waveform.max() > 0.6f)
         assertTrue(lowFrame.waveform.min() < -0.6f)
+        assertTrue(lowFrame.waveformMax.max() > 0.7f)
+        assertTrue(lowFrame.waveformMin.min() < -0.7f)
     }
 
     @Test

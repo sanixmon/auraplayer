@@ -57,7 +57,9 @@ class VisualizerBus {
         outBands: FloatArray,
         outWave: FloatArray,
         outScalars: FloatArray,
-        nowElapsedMs: Long = SystemClock.elapsedRealtime()
+        nowElapsedMs: Long = SystemClock.elapsedRealtime(),
+        outWaveMax: FloatArray? = null,
+        outWaveMin: FloatArray? = null
     ): Boolean {
         var f0: VisualizerFrame? = null
         var f1: VisualizerFrame? = null
@@ -123,49 +125,14 @@ class VisualizerBus {
 
         val a = f0 ?: return false
         val b = f1 ?: a
-        val aBands = a.spectrumBands
-        val bBands = b.spectrumBands
-        if (aBands.isEmpty()) return false
+        if (a.spectrumBands.isEmpty()) return false
+
+        interpolateSeries(a.spectrumBands, b.spectrumBands, tFraction, outBands)
+        interpolateSeries(a.waveform, b.waveform, tFraction, outWave)
+        outWaveMax?.let { interpolateSeries(a.waveformMax, b.waveformMax, tFraction, it) }
+        outWaveMin?.let { interpolateSeries(a.waveformMin, b.waveformMin, tFraction, it) }
 
         val inv = 1f - tFraction
-        for (i in outBands.indices) {
-            val idxA = ((i.toFloat() / outBands.size) * aBands.size)
-                .toInt()
-                .coerceIn(0, aBands.lastIndex)
-            val valA = aBands[idxA]
-            val valB = if (bBands.isNotEmpty()) {
-                val idxB = ((i.toFloat() / outBands.size) * bBands.size)
-                    .toInt()
-                    .coerceIn(0, bBands.lastIndex)
-                bBands[idxB]
-            } else {
-                valA
-            }
-            outBands[i] = valA * inv + valB * tFraction
-        }
-
-        val aWave = a.waveform
-        val bWave = b.waveform
-        if (aWave.isNotEmpty()) {
-            for (i in outWave.indices) {
-                val idxA = ((i.toFloat() / outWave.size) * aWave.size)
-                    .toInt()
-                    .coerceIn(0, aWave.lastIndex)
-                val valA = aWave[idxA]
-                val valB = if (bWave.isNotEmpty()) {
-                    val idxB = ((i.toFloat() / outWave.size) * bWave.size)
-                        .toInt()
-                        .coerceIn(0, bWave.lastIndex)
-                    bWave[idxB]
-                } else {
-                    valA
-                }
-                outWave[i] = valA * inv + valB * tFraction
-            }
-        } else {
-            outWave.fill(0f)
-        }
-
         if (outScalars.size >= SCALAR_COUNT) {
             outScalars[SCALAR_BASS] = a.bassEnergy * inv + b.bassEnergy * tFraction
             outScalars[SCALAR_MID] = a.midEnergy * inv + b.midEnergy * tFraction
@@ -176,6 +143,34 @@ class VisualizerBus {
         }
 
         return true
+    }
+
+    private fun interpolateSeries(
+        listA: List<Float>,
+        listB: List<Float>,
+        tFraction: Float,
+        out: FloatArray
+    ) {
+        if (listA.isEmpty()) {
+            out.fill(0f)
+            return
+        }
+        val inv = 1f - tFraction
+        for (i in out.indices) {
+            val idxA = ((i.toFloat() / out.size) * listA.size)
+                .toInt()
+                .coerceIn(0, listA.lastIndex)
+            val valA = listA[idxA]
+            val valB = if (listB.isNotEmpty()) {
+                val idxB = ((i.toFloat() / out.size) * listB.size)
+                    .toInt()
+                    .coerceIn(0, listB.lastIndex)
+                listB[idxB]
+            } else {
+                valA
+            }
+            out[i] = valA * inv + valB * tFraction
+        }
     }
 
     companion object {

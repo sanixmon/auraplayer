@@ -66,6 +66,7 @@ import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.VisualizerCanvas
 import com.auraplayer.app.ui.components.toPalette
 import com.auraplayer.app.ui.theme.AccentColors
+import com.auraplayer.app.ui.theme.LocalAlbumAccentColors
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -87,10 +88,7 @@ fun SettingsScreen(
 
     var activeColorPicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
 
-    val dynamicAccent = AccentColors(
-        primary = MaterialTheme.colorScheme.primary,
-        secondary = MaterialTheme.colorScheme.secondary
-    )
+    val dynamicAccent = LocalAlbumAccentColors.current
 
     Scaffold(
         modifier = modifier,
@@ -120,8 +118,8 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .height(215.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 4.dp
             ) {
                 Box(
@@ -141,8 +139,13 @@ fun SettingsScreen(
                     CoverArtView(
                         track = currentTrack,
                         style = config.coverArtStyle,
-                        isPlaying = true,
-                        bassEnergy = if (isPlaying) frame.bassEnergy else 0.25f,
+                        isPlaying = isPlaying,
+                        bassEnergy = frame.bassEnergy,
+                        beatPulse = frame.beatPulse,
+                        sensitivity = config.sensitivity,
+                        syncOffsetMs = config.syncOffsetMs,
+                        demoWhenIdle = true,
+                        visualizerBus = viewModel.visualizerBus,
                         size = 104.dp
                     )
                 }
@@ -159,8 +162,8 @@ fun SettingsScreen(
             ) {
                 // App Color & Cover Art Dropdowns
                 Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    shape = RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(
                         modifier = Modifier
@@ -190,8 +193,8 @@ fun SettingsScreen(
 
                 // Expanded Visualizer Studio
                 Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    shape = RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(
                         modifier = Modifier
