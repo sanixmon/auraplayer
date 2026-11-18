@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
+import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFrame
@@ -53,6 +55,14 @@ class NowPlayingViewModel(
 
     fun selectVisualizerColorScheme(scheme: VisualizerColorScheme) {
         viewModelScope.launch { visualizerPreferences.updateColorScheme(scheme) }
+    }
+
+    fun selectVisualMode(mode: NowPlayingVisualMode) {
+        viewModelScope.launch { visualizerPreferences.updateVisualMode(mode) }
+    }
+
+    fun selectCoverArtStyle(style: CoverArtStyle) {
+        viewModelScope.launch { visualizerPreferences.updateCoverArtStyle(style) }
     }
 
     class Factory(

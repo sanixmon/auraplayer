@@ -8,6 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.auraplayer.app.data.model.AppAccentMode
+import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -30,6 +34,10 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         val GLOW_ENABLED = booleanPreferencesKey("visualizer_glow_enabled")
         val MIRROR_ENABLED = booleanPreferencesKey("visualizer_mirror_enabled")
         val PEAK_CAPS_ENABLED = booleanPreferencesKey("visualizer_peak_caps_enabled")
+        val VISUAL_MODE = stringPreferencesKey("now_playing_visual_mode")
+        val COVER_ART_STYLE = stringPreferencesKey("cover_art_style")
+        val ACCENT_MODE = stringPreferencesKey("app_accent_mode")
+        val ACCENT_PRESET = stringPreferencesKey("app_accent_preset")
     }
 
     val configFlow: Flow<VisualizerConfig> = context.visualizerDataStore.data.map { prefs ->
@@ -48,7 +56,19 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             smoothing = (prefs[Keys.SMOOTHING] ?: defaults.smoothing).coerceIn(0.15f, 0.95f),
             glowEnabled = prefs[Keys.GLOW_ENABLED] ?: defaults.glowEnabled,
             mirrorEnabled = prefs[Keys.MIRROR_ENABLED] ?: defaults.mirrorEnabled,
-            peakCapsEnabled = prefs[Keys.PEAK_CAPS_ENABLED] ?: defaults.peakCapsEnabled
+            peakCapsEnabled = prefs[Keys.PEAK_CAPS_ENABLED] ?: defaults.peakCapsEnabled,
+            visualMode = prefs[Keys.VISUAL_MODE]?.let { name ->
+                NowPlayingVisualMode.entries.firstOrNull { it.name == name }
+            } ?: defaults.visualMode,
+            coverArtStyle = prefs[Keys.COVER_ART_STYLE]?.let { name ->
+                CoverArtStyle.entries.firstOrNull { it.name == name }
+            } ?: defaults.coverArtStyle,
+            accentMode = prefs[Keys.ACCENT_MODE]?.let { name ->
+                AppAccentMode.entries.firstOrNull { it.name == name }
+            } ?: defaults.accentMode,
+            accentPreset = prefs[Keys.ACCENT_PRESET]?.let { name ->
+                AppAccentPreset.entries.firstOrNull { it.name == name }
+            } ?: defaults.accentPreset
         )
     }
 
@@ -82,6 +102,25 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     suspend fun updatePeakCapsEnabled(enabled: Boolean) {
         context.visualizerDataStore.edit { it[Keys.PEAK_CAPS_ENABLED] = enabled }
+    }
+
+    suspend fun updateVisualMode(mode: NowPlayingVisualMode) {
+        context.visualizerDataStore.edit { it[Keys.VISUAL_MODE] = mode.name }
+    }
+
+    suspend fun updateCoverArtStyle(style: CoverArtStyle) {
+        context.visualizerDataStore.edit { it[Keys.COVER_ART_STYLE] = style.name }
+    }
+
+    suspend fun updateAccentMode(mode: AppAccentMode) {
+        context.visualizerDataStore.edit { it[Keys.ACCENT_MODE] = mode.name }
+    }
+
+    suspend fun updateAccentPreset(preset: AppAccentPreset) {
+        context.visualizerDataStore.edit {
+            it[Keys.ACCENT_PRESET] = preset.name
+            it[Keys.ACCENT_MODE] = AppAccentMode.CUSTOM.name
+        }
     }
 
     suspend fun resetToDefaults() {

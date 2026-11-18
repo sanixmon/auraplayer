@@ -1,6 +1,7 @@
 package com.auraplayer.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
+import com.auraplayer.app.ui.theme.AccentColors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -37,7 +39,32 @@ data class VisualizerPalette(
     val glow: Color
 )
 
-fun VisualizerColorScheme.toPalette(): VisualizerPalette = when (this) {
+private data class AveeParticle(
+    val angleRad: Float,
+    var radiusProgress: Float,
+    val speedFactor: Float,
+    val baseSize: Float,
+    val colorIndex: Int
+)
+
+fun VisualizerColorScheme.toPalette(
+    dynamicAccent: AccentColors? = null
+): VisualizerPalette = when (this) {
+    VisualizerColorScheme.DYNAMIC -> {
+        val p = dynamicAccent?.primary ?: Color(0xFF00E5FF)
+        val s = dynamicAccent?.secondary ?: Color(0xFFA855F7)
+        VisualizerPalette(
+            start = p,
+            mid = Color(
+                red = (p.red + s.red) * 0.5f,
+                green = (p.green + s.green) * 0.5f,
+                blue = (p.blue + s.blue) * 0.5f,
+                alpha = 1f
+            ),
+            end = s,
+            glow = p
+        )
+    }
     VisualizerColorScheme.AURORA -> VisualizerPalette(
         start = Color(0xFF00E5FF),
         mid = Color(0xFF6366F1),
@@ -76,33 +103,58 @@ fun VisualizerCanvas(
     config: VisualizerConfig,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
-    demoWhenIdle: Boolean = false
+    demoWhenIdle: Boolean = false,
+    centerRingRadiusRatio: Float = 0.25f,
+    dynamicAccent: AccentColors? = AccentColors(
+        primary = MaterialTheme.colorScheme.primary,
+        secondary = MaterialTheme.colorScheme.secondary
+    )
 ) {
     val bandCount = config.density.bandCount
     val smoothedBands = remember(bandCount) { FloatArray(bandCount) }
     val peakCaps = remember(bandCount) { FloatArray(bandCount) }
     val smoothedWave = remember { FloatArray(64) }
+    val particles = remember {
+        List(56) { idx ->
+            AveeParticle(
+                angleRad = ((idx * 137.508f) % 360f) * (PI.toFloat() / 180f),
+                radiusProgress = (idx % 17) / 17f,
+                speedFactor = 0.45f + ((idx * 7) % 10) * 0.08f,
+                baseSize = 1.8f + (idx % 4) * 0.9f,
+                colorIndex = idx % 3
+            )
+        }
+    }
+
     var animTimeSec by remember { mutableFloatStateOf(0f) }
     var frameTick by remember { mutableLongStateOf(0L) }
+    var smoothedBass by remember { mutableFloatStateOf(0f) }
 
+    // Run 60fps animation only while playing or in live preview; decay gracefully when paused.
     LaunchedEffect(isPlaying, demoWhenIdle) {
         var lastNanos = 0L
-        while (true) {
+        var settleFrames = if (isPlaying || demoWhenIdle) Int.MAX_VALUE else 45
+        while (settleFrames > 0) {
             withFrameNanos { nowNanos ->
-                if (lastNanos != 0L) {
-                    val dt = ((nowNanos - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
-                    animTimeSec += dt
+                val dt = if (lastNanos != 0L) {
+                    ((nowNanos - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                } else {
+                    0.016f
                 }
                 lastNanos = nowNanos
+                if (isPlaying || demoWhenIdle) {
+                    animTimeSec += dt
+                } else {
+                    settleFrames--
+                }
                 frameTick++
             }
         }
     }
 
-    val palette = config.colorScheme.toPalette()
+    val palette = config.colorScheme.toPalette(dynamicAccent)
 
     Canvas(modifier = modifier) {
-        // Read frameTick so Canvas invalidates every animation frame for smooth decay & idle motion.
         val tick = frameTick
         if (tick < 0L) return@Canvas
 
@@ -111,11 +163,25 @@ fun VisualizerCanvas(
         val smoothFactor = config.smoothing.coerceIn(0.15f, 0.95f)
         val sensitivity = config.sensitivity.coerceIn(0.5f, 2.5f)
 
+        val targetBass = when {
+            useDemo -> (0.42f + 0.28f * sin(animTimeSec * 3.1f)).coerceIn(0f, 1f)
+            isPlaying -> (frame.bassEnergy * sensitivity).coerceIn(0f, 1f)
+            else -> 0f
+        }
+        smoothedBass += (targetBass - smoothedBass) * (1f - smoothFactor * 0.65f)
+
+        if (isPlaying || demoWhenIdle) {
+            val particleStep = 0.004f + smoothedBass * 0.022f
+            for (p in particles) {
+                p.radiusProgress = (p.radiusProgress + particleStep * p.speedFactor) % 1f
+            }
+        }
+
         for (i in 0 until bandCount) {
             val target = when {
                 useDemo -> {
-                    val phase = animTimeSec * 2.8f + i * 0.25f
-                    ((sin(phase) * 0.35f + cos(phase * 0.5f) * 0.25f + 0.45f) * 0.65f * sensitivity)
+                    val phase = animTimeSec * 3.0f + i * 0.24f
+                    ((sin(phase) * 0.35f + cos(phase * 0.55f) * 0.25f + 0.45f) * 0.65f * sensitivity)
                         .coerceIn(0.05f, 1f)
                 }
                 isPlaying && rawBands.isNotEmpty() -> {
@@ -124,9 +190,7 @@ fun VisualizerCanvas(
                         .coerceIn(0, rawBands.lastIndex)
                     (rawBands[srcIdx] * sensitivity).coerceIn(0f, 1f)
                 }
-                else -> {
-                    (0.03f + 0.02f * sin(animTimeSec * 1.5f + i * 0.2f)).coerceIn(0.01f, 0.08f)
-                }
+                else -> 0f
             }
 
             val prev = smoothedBands[i]
@@ -140,7 +204,7 @@ fun VisualizerCanvas(
             if (next >= peakCaps[i]) {
                 peakCaps[i] = next
             } else {
-                peakCaps[i] = max(next, peakCaps[i] - 0.008f)
+                peakCaps[i] = max(next, peakCaps[i] - 0.01f)
             }
         }
 
@@ -163,6 +227,16 @@ fun VisualizerCanvas(
         }
 
         when (config.style) {
+            VisualizerStyle.CIRCULAR_AURA -> drawAveeRadialRing(
+                bands = smoothedBands,
+                peaks = peakCaps,
+                particles = particles,
+                bassEnergy = smoothedBass,
+                palette = palette,
+                config = config,
+                timeSec = animTimeSec,
+                centerRingRatio = centerRingRadiusRatio
+            )
             VisualizerStyle.BARS -> drawBars(
                 bands = smoothedBands,
                 peaks = peakCaps,
@@ -173,12 +247,6 @@ fun VisualizerCanvas(
                 wave = smoothedWave,
                 palette = palette,
                 config = config
-            )
-            VisualizerStyle.CIRCULAR_AURA -> drawCircularAura(
-                bands = smoothedBands,
-                palette = palette,
-                config = config,
-                timeSec = animTimeSec
             )
             VisualizerStyle.MIRROR_SPECTRUM -> drawMirrorSpectrum(
                 bands = smoothedBands,
@@ -194,6 +262,131 @@ fun VisualizerCanvas(
             )
         }
     }
+}
+
+/**
+ * Avee Player / vizz.fm inspired radial visualizer:
+ * bass-reactive nebula glow, outward bokeh particles, harmonic halo ring, and symmetrical radial spectrum bars.
+ */
+private fun DrawScope.drawAveeRadialRing(
+    bands: FloatArray,
+    peaks: FloatArray,
+    particles: List<AveeParticle>,
+    bassEnergy: Float,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    timeSec: Float,
+    centerRingRatio: Float
+) {
+    val count = bands.size
+    if (count == 0) return
+
+    val center = Offset(size.width / 2f, size.height / 2f)
+    val minDim = min(size.width, size.height)
+    val baseRadius = minDim * centerRingRatio.coerceIn(0.18f, 0.36f) + bassEnergy * (minDim * 0.025f)
+    val maxSpike = minDim * 0.21f
+    val rotationOffset = timeSec * 0.22f
+
+    // 1. Deep reactive nebula halo behind cover art
+    if (config.glowEnabled) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    palette.glow.copy(alpha = (0.18f + bassEnergy * 0.26f).coerceIn(0f, 0.5f)),
+                    palette.end.copy(alpha = (0.08f + bassEnergy * 0.14f).coerceIn(0f, 0.3f)),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = baseRadius + maxSpike * 1.25f
+            ),
+            radius = baseRadius + maxSpike * 1.25f,
+            center = center
+        )
+    }
+
+    // 2. Beat-reactive Avee bokeh starfield particles radiating from center
+    val maxParticleRadius = minDim * 0.49f
+    for (p in particles) {
+        val r = baseRadius * 0.85f + p.radiusProgress * (maxParticleRadius - baseRadius * 0.7f)
+        val a = p.angleRad + timeSec * 0.15f * p.speedFactor
+        val pos = Offset(center.x + cos(a) * r, center.y + sin(a) * r)
+        val alpha = ((1f - p.radiusProgress) * (0.25f + bassEnergy * 0.65f)).coerceIn(0f, 0.85f)
+        val color = when (p.colorIndex) {
+            0 -> palette.start
+            1 -> palette.mid
+            else -> palette.end
+        }
+        drawCircle(
+            color = color.copy(alpha = alpha),
+            radius = p.baseSize * (1f + bassEnergy * 0.7f),
+            center = pos
+        )
+    }
+
+    // 3. Inner sweep ring hugging the album cover
+    drawCircle(
+        brush = Brush.sweepGradient(listOf(palette.start, palette.mid, palette.end, palette.start)),
+        radius = baseRadius,
+        center = center,
+        style = Stroke(width = 3.5f + bassEnergy * 2.5f)
+    )
+
+    // 4. Mirror-symmetric Avee frequency bars + smooth outer aura contour
+    val halfCount = max(1, count / 2)
+    val outerPath = Path()
+    val angleStep = (2.0 * PI / count).toFloat()
+
+    for (i in 0 until count) {
+        val mirrorIdx = if (i < halfCount) i else count - 1 - i
+        val mag = bands[mirrorIdx.coerceIn(0, bands.lastIndex)]
+        val angle = i * angleStep + rotationOffset
+        val cosA = cos(angle)
+        val sinA = sin(angle)
+
+        val innerR = baseRadius + 4f
+        val outerR = baseRadius + 8f + mag * maxSpike
+
+        val start = Offset(center.x + cosA * innerR, center.y + sinA * innerR)
+        val end = Offset(center.x + cosA * outerR, center.y + sinA * outerR)
+
+        val t = mirrorIdx.toFloat() / halfCount
+        val barColor = when {
+            t < 0.35f -> palette.start
+            t < 0.7f -> palette.mid
+            else -> palette.end
+        }
+
+        drawLine(
+            color = barColor,
+            start = start,
+            end = end,
+            strokeWidth = (minDim / count * 0.58f).coerceIn(2f, 6.5f),
+            cap = StrokeCap.Round
+        )
+
+        val contourPoint = Offset(center.x + cosA * (outerR + 3f), center.y + sinA * (outerR + 3f))
+        if (i == 0) {
+            outerPath.moveTo(contourPoint.x, contourPoint.y)
+        } else {
+            outerPath.lineTo(contourPoint.x, contourPoint.y)
+        }
+
+        if (config.peakCapsEnabled) {
+            val peakR = baseRadius + 10f + peaks[mirrorIdx.coerceIn(0, peaks.lastIndex)] * maxSpike
+            drawCircle(
+                color = palette.start.copy(alpha = 0.85f),
+                radius = 2.1f,
+                center = Offset(center.x + cosA * peakR, center.y + sinA * peakR)
+            )
+        }
+    }
+    outerPath.close()
+
+    drawPath(
+        path = outerPath,
+        color = palette.glow.copy(alpha = if (config.glowEnabled) 0.38f else 0.2f),
+        style = Stroke(width = 2.2f, join = StrokeJoin.Round)
+    )
 }
 
 private fun DrawScope.drawBars(
@@ -226,10 +419,7 @@ private fun DrawScope.drawBars(
         if (config.glowEnabled) {
             drawRoundRect(
                 color = palette.glow.copy(alpha = 0.20f),
-                topLeft = Offset(
-                    x = x - 2f,
-                    y = baselineY - barHeight - 2f
-                ),
+                topLeft = Offset(x = x - 2f, y = baselineY - barHeight - 2f),
                 size = Size(
                     width = barWidth + 4f,
                     height = if (config.mirrorEnabled) barHeight * 2f + 4f else barHeight + 4f
@@ -238,21 +428,12 @@ private fun DrawScope.drawBars(
             )
         }
 
-        if (config.mirrorEnabled) {
-            drawRoundRect(
-                brush = brush,
-                topLeft = Offset(x, baselineY - barHeight),
-                size = Size(barWidth, barHeight * 2f),
-                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-            )
-        } else {
-            drawRoundRect(
-                brush = brush,
-                topLeft = Offset(x, baselineY - barHeight),
-                size = Size(barWidth, barHeight),
-                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-            )
-        }
+        drawRoundRect(
+            brush = brush,
+            topLeft = Offset(x, baselineY - barHeight),
+            size = Size(barWidth, if (config.mirrorEnabled) barHeight * 2f else barHeight),
+            cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+        )
 
         if (config.peakCapsEnabled) {
             val peakHeight = peaks[i] * (if (config.mirrorEnabled) size.height * 0.44f else maxHeight)
@@ -322,78 +503,6 @@ private fun DrawScope.drawWaveform(
             alpha = 0.45f,
             style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
-    }
-}
-
-private fun DrawScope.drawCircularAura(
-    bands: FloatArray,
-    palette: VisualizerPalette,
-    config: VisualizerConfig,
-    timeSec: Float
-) {
-    val count = bands.size
-    if (count == 0) return
-
-    val center = Offset(size.width / 2f, size.height / 2f)
-    val minDim = min(size.width, size.height)
-    val baseRadius = minDim * 0.27f
-    val maxSpike = minDim * 0.19f
-    val rotationOffset = timeSec * 0.35f
-
-    if (config.glowEnabled) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    palette.glow.copy(alpha = 0.24f),
-                    palette.end.copy(alpha = 0.08f),
-                    Color.Transparent
-                ),
-                center = center,
-                radius = baseRadius + maxSpike
-            ),
-            radius = baseRadius + maxSpike,
-            center = center
-        )
-    }
-
-    drawCircle(
-        brush = Brush.sweepGradient(listOf(palette.start, palette.mid, palette.end, palette.start)),
-        radius = baseRadius,
-        center = center,
-        style = Stroke(width = 3f)
-    )
-
-    val angleStep = (2.0 * PI / count).toFloat()
-    for (i in 0 until count) {
-        val angle = i * angleStep + rotationOffset
-        val mag = bands[i]
-        val innerR = if (config.mirrorEnabled) baseRadius - mag * maxSpike * 0.35f else baseRadius + 4f
-        val outerR = baseRadius + 6f + mag * maxSpike
-        val cosA = cos(angle)
-        val sinA = sin(angle)
-
-        val start = Offset(center.x + cosA * innerR, center.y + sinA * innerR)
-        val end = Offset(center.x + cosA * outerR, center.y + sinA * outerR)
-
-        val t = i.toFloat() / count
-        val lineColor = if (t < 0.5f) palette.start else palette.end
-
-        drawLine(
-            color = lineColor,
-            start = start,
-            end = end,
-            strokeWidth = (minDim / count * 0.65f).coerceIn(2f, 7f),
-            cap = StrokeCap.Round
-        )
-
-        if (config.peakCapsEnabled) {
-            val dotPos = Offset(center.x + cosA * (outerR + 5f), center.y + sinA * (outerR + 5f))
-            drawCircle(
-                color = palette.mid.copy(alpha = 0.85f),
-                radius = 2.5f,
-                center = dotPos
-            )
-        }
     }
 }
 

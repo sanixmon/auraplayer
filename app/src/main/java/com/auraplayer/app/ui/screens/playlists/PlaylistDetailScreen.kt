@@ -2,7 +2,8 @@ package com.auraplayer.app.ui.screens.playlists
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
@@ -40,18 +42,21 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.auraplayer.app.data.model.PlaylistEntry
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.ui.components.TrackListItem
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,10 +69,13 @@ fun PlaylistDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+
     val localEntries = remember { mutableStateListOf<PlaylistEntry>() }
-    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var draggedEntryId by remember { mutableStateOf<Long?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    var itemHeightPx by remember { mutableFloatStateOf(160f) }
     var showAddTracksSheet by remember { mutableStateOf(false) }
 
     var trackPendingRelocate by remember { mutableStateOf<Track?>(null) }
@@ -81,8 +89,8 @@ fun PlaylistDetailScreen(
         trackPendingRelocate = null
     }
 
-    LaunchedEffect(state.entries, draggedIndex) {
-        if (draggedIndex == null) {
+    LaunchedEffect(state.entries, draggedEntryId) {
+        if (draggedEntryId == null) {
             localEntries.clear()
             localEntries.addAll(state.entries)
         }
@@ -181,6 +189,7 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = 16.dp,
@@ -194,7 +203,7 @@ fun PlaylistDetailScreen(
                         items = localEntries,
                         key = { _, entry -> entry.entryId }
                     ) { index, entry ->
-                        val isDragging = draggedIndex == index
+                        val isDragging = draggedEntryId == entry.entryId
                         TrackListItem(
                             track = entry.track,
                             isActive = entry.track.id == activeTrackId,
@@ -207,63 +216,108 @@ fun PlaylistDetailScreen(
                             },
                             modifier = Modifier
                                 .zIndex(if (isDragging) 1f else 0f)
-                                .onSizeChanged { size ->
-                                    if (size.height > 0) {
-                                        itemHeightPx = size.height.toFloat()
-                                    }
-                                }
                                 .graphicsLayer {
                                     translationY = if (isDragging) dragOffsetY else 0f
-                                    scaleX = if (isDragging) 1.02f else 1f
-                                    scaleY = if (isDragging) 1.02f else 1f
-                                }
-                                .pointerInput(entry.entryId) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            val startIdx = localEntries.indexOfFirst {
-                                                it.entryId == entry.entryId
-                                            }
-                                            if (startIdx >= 0) {
-                                                draggedIndex = startIdx
-                                                dragOffsetY = 0f
-                                            }
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            val currentIdx = draggedIndex
-                                                ?: return@detectDragGesturesAfterLongPress
-                                            dragOffsetY += dragAmount.y
-                                            val threshold = itemHeightPx * 0.65f
-                                            if (dragOffsetY > threshold && currentIdx < localEntries.lastIndex) {
-                                                val item = localEntries.removeAt(currentIdx)
-                                                localEntries.add(currentIdx + 1, item)
-                                                draggedIndex = currentIdx + 1
-                                                dragOffsetY -= itemHeightPx
-                                            } else if (dragOffsetY < -threshold && currentIdx > 0) {
-                                                val item = localEntries.removeAt(currentIdx)
-                                                localEntries.add(currentIdx - 1, item)
-                                                draggedIndex = currentIdx - 1
-                                                dragOffsetY += itemHeightPx
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            viewModel.saveEntryOrder(localEntries.map { it.entryId })
-                                            draggedIndex = null
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggedIndex = null
-                                            dragOffsetY = 0f
-                                        }
-                                    )
+                                    scaleX = if (isDragging) 1.03f else 1f
+                                    scaleY = if (isDragging) 1.03f else 1f
+                                    shadowElevation = if (isDragging) 16f else 0f
                                 },
                             trailingContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Rounded.DragHandle,
-                                        contentDescription = "Reorder",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                        contentDescription = "Drag to reorder",
+                                        tint = if (isDragging) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier
+                                            .padding(horizontal = 6.dp, vertical = 8.dp)
+                                            .pointerInput(entry.entryId) {
+                                                detectDragGestures(
+                                                    onDragStart = {
+                                                        draggedEntryId = entry.entryId
+                                                        dragOffsetY = 0f
+                                                        haptic.performHapticFeedback(
+                                                            HapticFeedbackType.LongPress
+                                                        )
+                                                    },
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        if (draggedEntryId != entry.entryId) return@detectDragGestures
+                                                        dragOffsetY += dragAmount.y
+
+                                                        val visibleItems = listState.layoutInfo.visibleItemsInfo
+                                                        val currentItemInfo = visibleItems.firstOrNull {
+                                                            it.key == entry.entryId
+                                                        } ?: return@detectDragGestures
+
+                                                        val currentIdx = currentItemInfo.index
+                                                        val currentCenterY = currentItemInfo.offset +
+                                                            (currentItemInfo.size / 2f) +
+                                                            dragOffsetY
+
+                                                        // Swap with next item when dragged center crosses next item's midpoint
+                                                        val nextItem = visibleItems.firstOrNull {
+                                                            it.index == currentIdx + 1
+                                                        }
+                                                        val prevItem = visibleItems.firstOrNull {
+                                                            it.index == currentIdx - 1
+                                                        }
+
+                                                        if (nextItem != null &&
+                                                            currentIdx < localEntries.lastIndex &&
+                                                            currentCenterY > nextItem.offset + nextItem.size / 2f
+                                                        ) {
+                                                            val moved = localEntries.removeAt(currentIdx)
+                                                            localEntries.add(currentIdx + 1, moved)
+                                                            dragOffsetY -= (nextItem.offset - currentItemInfo.offset)
+                                                            haptic.performHapticFeedback(
+                                                                HapticFeedbackType.TextHandleMove
+                                                            )
+                                                        } else if (prevItem != null &&
+                                                            currentIdx > 0 &&
+                                                            currentCenterY < prevItem.offset + prevItem.size / 2f
+                                                        ) {
+                                                            val moved = localEntries.removeAt(currentIdx)
+                                                            localEntries.add(currentIdx - 1, moved)
+                                                            dragOffsetY += (currentItemInfo.offset - prevItem.offset)
+                                                            haptic.performHapticFeedback(
+                                                                HapticFeedbackType.TextHandleMove
+                                                            )
+                                                        }
+
+                                                        // Auto-scroll near viewport top/bottom edges
+                                                        val viewportStart = listState.layoutInfo.viewportStartOffset
+                                                        val viewportEnd = listState.layoutInfo.viewportEndOffset
+                                                        val topEdge = viewportStart + 90f
+                                                        val bottomEdge = viewportEnd - 90f
+                                                        val itemTop = currentItemInfo.offset + dragOffsetY
+                                                        val itemBottom = itemTop + currentItemInfo.size
+                                                        if (itemBottom > bottomEdge) {
+                                                            scope.launch {
+                                                                listState.scrollBy(18f)
+                                                            }
+                                                        } else if (itemTop < topEdge) {
+                                                            scope.launch {
+                                                                listState.scrollBy(-18f)
+                                                            }
+                                                        }
+                                                    },
+                                                    onDragEnd = {
+                                                        viewModel.saveEntryOrder(
+                                                            localEntries.map { it.entryId }
+                                                        )
+                                                        draggedEntryId = null
+                                                        dragOffsetY = 0f
+                                                    },
+                                                    onDragCancel = {
+                                                        draggedEntryId = null
+                                                        dragOffsetY = 0f
+                                                    }
+                                                )
+                                            }
                                     )
                                     IconButton(onClick = { viewModel.removeEntry(entry.entryId) }) {
                                         Icon(

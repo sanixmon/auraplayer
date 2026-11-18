@@ -1,7 +1,8 @@
 package com.auraplayer.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.FindInPage
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MusicNote
@@ -27,23 +27,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.auraplayer.app.data.artwork.toArtworkRequest
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.ui.util.formatDurationMs
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackListItem(
     track: Track,
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onAddToPlaylist: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onRelocateUnavailable: (() -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null
 ) {
+    val haptic = LocalHapticFeedback.current
     val bgColor = when {
         !track.isAvailable -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -55,7 +60,18 @@ fun TrackListItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(bgColor)
-            .clickable(enabled = track.isAvailable, onClick = onClick)
+            .combinedClickable(
+                enabled = track.isAvailable,
+                onClick = onClick,
+                onLongClick = if (onLongClick != null) {
+                    {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongClick()
+                    }
+                } else {
+                    null
+                }
+            )
             .alpha(if (track.isAvailable) 1f else 0.55f)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -81,9 +97,9 @@ fun TrackListItem(
                 },
                 modifier = Modifier.size(22.dp)
             )
-            if (track.isAvailable && track.albumArtUri != null) {
+            if (track.isAvailable) {
                 AsyncImage(
-                    model = track.albumArtUri,
+                    model = track.toArtworkRequest(),
                     contentDescription = track.album,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize()
@@ -131,14 +147,6 @@ fun TrackListItem(
                     imageVector = Icons.Rounded.FindInPage,
                     contentDescription = "Locate file",
                     tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        } else if (track.isAvailable && onAddToPlaylist != null) {
-            IconButton(onClick = onAddToPlaylist) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                    contentDescription = "Add to playlist",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

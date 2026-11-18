@@ -1,5 +1,10 @@
 package com.auraplayer.app.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -210,7 +215,32 @@ fun AuraAppRoot(
                                 )
                             }
 
-                            composable<AuraRoute.NowPlaying> {
+                            composable<AuraRoute.NowPlaying>(
+                                enterTransition = {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Up,
+                                        animationSpec = tween(360, easing = FastOutSlowInEasing)
+                                    ) + fadeIn(tween(240))
+                                },
+                                exitTransition = {
+                                    slideOutOfContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Down,
+                                        animationSpec = tween(320, easing = FastOutSlowInEasing)
+                                    ) + fadeOut(tween(220))
+                                },
+                                popEnterTransition = {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Up,
+                                        animationSpec = tween(360, easing = FastOutSlowInEasing)
+                                    ) + fadeIn(tween(240))
+                                },
+                                popExitTransition = {
+                                    slideOutOfContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Down,
+                                        animationSpec = tween(320, easing = FastOutSlowInEasing)
+                                    ) + fadeOut(tween(220))
+                                }
+                            ) {
                                 val vm: NowPlayingViewModel = viewModel(
                                     factory = NowPlayingViewModel.Factory(
                                         playbackController = appContainer.playbackController,

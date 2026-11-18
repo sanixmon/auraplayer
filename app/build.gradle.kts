@@ -137,6 +137,7 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

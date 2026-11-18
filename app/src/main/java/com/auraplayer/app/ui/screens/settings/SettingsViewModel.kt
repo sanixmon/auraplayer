@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
+import com.auraplayer.app.data.model.AppAccentMode
+import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFrame
@@ -31,6 +35,14 @@ class SettingsViewModel(
 
     val visualizerFrame: StateFlow<VisualizerFrame> = visualizerBus.frames
 
+    val currentTrack: StateFlow<Track?> = playbackController.state
+        .map { it.currentTrack }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000L),
+            initialValue = null
+        )
+
     val isPlaying: StateFlow<Boolean> = playbackController.state
         .map { it.isPlaying }
         .stateIn(
@@ -57,6 +69,18 @@ class SettingsViewModel(
 
     fun setGlowEnabled(enabled: Boolean) {
         viewModelScope.launch { preferences.updateGlowEnabled(enabled) }
+    }
+
+    fun setCoverArtStyle(style: CoverArtStyle) {
+        viewModelScope.launch { preferences.updateCoverArtStyle(style) }
+    }
+
+    fun setAccentMode(mode: AppAccentMode) {
+        viewModelScope.launch { preferences.updateAccentMode(mode) }
+    }
+
+    fun setAccentPreset(preset: AppAccentPreset) {
+        viewModelScope.launch { preferences.updateAccentPreset(preset) }
     }
 
     fun resetDefaults() {

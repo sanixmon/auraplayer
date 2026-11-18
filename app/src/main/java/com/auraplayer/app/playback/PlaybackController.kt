@@ -51,7 +51,6 @@ class PlaybackController(
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController: MediaController? = null
     private var positionJob: Job? = null
-    private var trackLookup: Map<String, Track> = emptyMap()
     private var pendingPlayAction: (() -> Unit)? = null
 
     private val playerListener = object : Player.Listener {
@@ -95,29 +94,24 @@ class PlaybackController(
     }
 
     /**
-     * Loads available tracks into the Playback Queue, automatically skipping Unavailable entries.
+     * Loads available tracks into the Playback Queue, preserving exact positional index
+     * even when a playlist contains duplicate tracks, and skipping Unavailable entries.
      */
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         if (tracks.isEmpty()) return
-        val requestedTrack = tracks.getOrNull(startIndex.coerceIn(0, tracks.lastIndex))
-        val availableTracks = tracks.filter { it.isAvailable }
-        if (availableTracks.isEmpty()) return
+        val clampedStart = startIndex.coerceIn(0, tracks.lastIndex)
 
-        val resolvedIndex = if (requestedTrack != null && requestedTrack.isAvailable) {
-            availableTracks.indexOfFirst { it.id == requestedTrack.id }.coerceAtLeast(0)
-        } else {
-            // Find the next available track after the requested index if the clicked entry was unavailable.
-            val nextAvailable = tracks
-                .drop(startIndex.coerceAtLeast(0))
-                .firstOrNull { it.isAvailable }
-            if (nextAvailable != null) {
-                availableTracks.indexOfFirst { it.id == nextAvailable.id }.coerceAtLeast(0)
-            } else {
-                0
-            }
+        val indexedAvailable = tracks.mapIndexedNotNull { originalIdx, track ->
+            if (track.isAvailable) originalIdx to track else null
         }
+        if (indexedAvailable.isEmpty()) return
 
-        trackLookup = availableTracks.associateBy { it.id.toString() }
+        val resolvedIndex = indexedAvailable
+            .indexOfFirst { (originalIdx, _) -> originalIdx >= clampedStart }
+            .let { if (it >= 0) it else 0 }
+
+        val availableTracks = indexedAvailable.map { it.second }
+
         _state.update {
             it.copy(
                 queue = availableTracks,
@@ -129,7 +123,9 @@ class PlaybackController(
         val action = {
             val controller = mediaController
             if (controller != null) {
-                val items = availableTracks.map { it.toMediaItem() }
+                val items = availableTracks.mapIndexed { idx, track ->
+                    track.toMediaItem(queueIndex = idx)
+                }
                 controller.setMediaItems(items, resolvedIndex, 0L)
                 controller.prepare()
                 controller.play()
@@ -203,9 +199,7 @@ class PlaybackController(
 
     private fun syncFromPlayer(player: Player) {
         val index = player.currentMediaItemIndex
-        val mediaId = player.currentMediaItem?.mediaId
-        val activeTrack = mediaId?.let { trackLookup[it] }
-            ?: _state.value.queue.getOrNull(index)
+        val activeTrack = _state.value.queue.getOrNull(index)
         val rawDuration = player.duration
         val durationMs = if (rawDuration > 0L) rawDuration else (activeTrack?.durationMs ?: 0L)
 
@@ -253,7 +247,7 @@ class PlaybackController(
         positionJob = null
     }
 
-    private fun Track.toMediaItem(): MediaItem {
+    private fun Track.toMediaItem(queueIndex: Int): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artist)
@@ -264,7 +258,7 @@ class PlaybackController(
             .build()
 
         return MediaItem.Builder()
-            .setMediaId(id.toString())
+            .setMediaId("${queueIndex}_$id")
             .setUri(Uri.parse(uri))
             .setMediaMetadata(metadata)
             .build()

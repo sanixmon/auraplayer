@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +55,7 @@ fun PlaylistsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var editingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var playlistPendingDelete by remember { mutableStateOf<Playlist?>(null) }
 
     Scaffold(
         modifier = modifier,
@@ -154,7 +156,7 @@ fun PlaylistsScreen(
                             IconButton(onClick = { editingPlaylist = playlist }) {
                                 Icon(Icons.Rounded.Edit, contentDescription = "Edit")
                             }
-                            IconButton(onClick = { viewModel.deletePlaylist(playlist.id) }) {
+                            IconButton(onClick = { playlistPendingDelete = playlist }) {
                                 Icon(
                                     imageVector = Icons.Rounded.DeleteOutline,
                                     contentDescription = "Delete"
@@ -189,6 +191,34 @@ fun PlaylistsScreen(
             onConfirm = { name, desc ->
                 viewModel.renamePlaylist(target.id, name, desc)
                 editingPlaylist = null
+            }
+        )
+    }
+
+    playlistPendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { playlistPendingDelete = null },
+            title = { Text("Delete playlist?") },
+            text = {
+                Text("Remove \"${target.name}\"? Your songs will stay in your library.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deletePlaylist(target.id)
+                        playlistPendingDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistPendingDelete = null }) {
+                    Text("Cancel")
+                }
             }
         )
     }

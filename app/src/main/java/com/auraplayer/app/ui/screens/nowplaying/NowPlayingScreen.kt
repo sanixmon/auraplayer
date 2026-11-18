@@ -1,5 +1,9 @@
 package com.auraplayer.app.ui.screens.nowplaying
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +27,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Pause
@@ -42,10 +45,14 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -54,15 +61,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.RepeatMode
+import com.auraplayer.app.ui.components.CoverArtView
 import com.auraplayer.app.ui.components.TrackListItem
 import com.auraplayer.app.ui.components.VisualizerCanvas
 import com.auraplayer.app.ui.util.formatDurationMs
@@ -93,10 +102,18 @@ fun NowPlayingScreen(
         playbackState.positionMs.coerceIn(0L, durationMs)
     }
 
+    val stageHeight = if (isDockedSidePane) 260.dp else 340.dp
+    val accent = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                ),
                 title = {
                     Text(
                         text = if (isDockedSidePane) "Playing" else "",
@@ -125,7 +142,7 @@ fun NowPlayingScreen(
                     IconButton(onClick = { showVisualizerSheet = true }) {
                         Icon(
                             imageVector = Icons.Rounded.Palette,
-                            contentDescription = "Visualizer look"
+                            contentDescription = "Look & visualizer"
                         )
                     }
                     IconButton(onClick = { showQueueSheet = true }) {
@@ -141,60 +158,98 @@ fun NowPlayingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.14f),
+                            secondary.copy(alpha = 0.08f),
+                            MaterialTheme.colorScheme.background
+                        )
+                    )
+                )
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+                .padding(horizontal = 24.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Hero Stage: Avee/vizz.fm Visualizer in background + Large Cover Art in foreground
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (isDockedSidePane) 230.dp else 300.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 4.dp
+                    .height(stageHeight),
+                shape = RoundedCornerShape(30.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                tonalElevation = 2.dp
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    VisualizerCanvas(
-                        frame = visualizerFrame,
-                        config = visualizerConfig,
-                        isPlaying = playbackState.isPlaying,
-                        demoWhenIdle = false,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    )
-
-                    if (track != null) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(14.dp)
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
-                            contentAlignment = Alignment.Center
+                AnimatedContent(
+                    targetState = visualizerConfig.visualMode,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "now_playing_stage_mode"
+                ) { mode ->
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (mode == NowPlayingVisualMode.COVER_AND_VISUALIZER ||
+                            mode == NowPlayingVisualMode.VISUALIZER_ONLY
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.MusicNote,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                            VisualizerCanvas(
+                                frame = visualizerFrame,
+                                config = visualizerConfig,
+                                isPlaying = playbackState.isPlaying,
+                                demoWhenIdle = false,
+                                centerRingRadiusRatio = if (mode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
+                                    0.24f
+                                } else {
+                                    0.20f
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp)
                             )
-                            if (track.albumArtUri != null) {
-                                AsyncImage(
-                                    model = track.albumArtUri,
-                                    contentDescription = track.album,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.matchParentSize()
-                                )
+                        }
+
+                        if (mode == NowPlayingVisualMode.COVER_AND_VISUALIZER ||
+                            mode == NowPlayingVisualMode.COVER_ONLY
+                        ) {
+                            val coverSize = when {
+                                mode == NowPlayingVisualMode.COVER_ONLY && isDockedSidePane -> 185.dp
+                                mode == NowPlayingVisualMode.COVER_ONLY -> 235.dp
+                                isDockedSidePane -> 125.dp
+                                else -> 162.dp
                             }
+                            CoverArtView(
+                                track = track,
+                                style = visualizerConfig.coverArtStyle,
+                                isPlaying = playbackState.isPlaying,
+                                bassEnergy = visualizerFrame.bassEnergy,
+                                size = coverSize
+                            )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(14.dp))
+
+            // Mode Switcher: Art + Vibe | Cover | Visualizer
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                NowPlayingVisualMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = visualizerConfig.visualMode == mode,
+                        onClick = { viewModel.selectVisualMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = NowPlayingVisualMode.entries.size
+                        ),
+                        label = { Text(mode.displayName, maxLines = 1) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -216,7 +271,7 @@ fun NowPlayingScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
             Slider(
                 value = displayedPositionMs.toFloat(),
@@ -249,7 +304,7 @@ fun NowPlayingScreen(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -339,8 +394,23 @@ fun NowPlayingScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Visualizer", style = MaterialTheme.typography.titleLarge)
-                Text("Style", style = MaterialTheme.typography.titleMedium)
+                Text("Look & Visualizer", style = MaterialTheme.typography.titleLarge)
+
+                Text("Cover Art", style = MaterialTheme.typography.titleMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CoverArtStyle.entries.forEach { style ->
+                        FilterChip(
+                            selected = visualizerConfig.coverArtStyle == style,
+                            onClick = { viewModel.selectCoverArtStyle(style) },
+                            label = { Text(style.displayName) }
+                        )
+                    }
+                }
+
+                Text("Visualizer", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -353,6 +423,7 @@ fun NowPlayingScreen(
                         )
                     }
                 }
+
                 Text("Colors", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

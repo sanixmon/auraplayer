@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.auraplayer.app.data.artwork.toArtworkRequest
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.playback.PlaybackUiState
@@ -93,14 +94,12 @@ fun MiniPlayerBar(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        if (track.albumArtUri != null) {
-                            AsyncImage(
-                                model = track.albumArtUri,
-                                contentDescription = track.album,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.matchParentSize()
-                            )
-                        }
+                        AsyncImage(
+                            model = track.toArtworkRequest(),
+                            contentDescription = track.album,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize()
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
