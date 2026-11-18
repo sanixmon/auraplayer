@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFrame
@@ -127,6 +128,8 @@ fun VisualizerCanvas(
     modifier: Modifier = Modifier,
     demoWhenIdle: Boolean = false,
     centerRingRadiusRatio: Float = 0.24f,
+    centerRingRadiusDp: Dp? = null,
+    centerOverride: Offset? = null,
     dynamicAccent: AccentColors? = AccentColors(
         primary = MaterialTheme.colorScheme.primary,
         secondary = MaterialTheme.colorScheme.secondary
@@ -291,6 +294,9 @@ fun VisualizerCanvas(
             smoothedWave[i] = smoothedWave[i] + (targetWave - smoothedWave[i]) * (1f - smoothFactor * 0.62f)
         }
 
+        val explicitCenterRadiusPx = centerRingRadiusDp?.toPx()
+        val effectiveCenter = centerOverride ?: Offset(size.width / 2f, size.height / 2f)
+
         when (config.style) {
             VisualizerStyle.CIRCULAR_AURA -> drawRingVisualizer(
                 bands = smoothedBands,
@@ -304,7 +310,9 @@ fun VisualizerCanvas(
                 palette = palette,
                 config = config,
                 timeSec = animTimeSec,
+                center = effectiveCenter,
                 centerRingRatio = centerRingRadiusRatio,
+                explicitCenterRadiusPx = explicitCenterRadiusPx,
                 spread = spread,
                 thickness = thickness,
                 spinSpeed = spinSpeed
@@ -315,6 +323,7 @@ fun VisualizerCanvas(
                 bassEnergy = smoothedBass,
                 palette = palette,
                 config = config,
+                center = effectiveCenter,
                 spread = spread,
                 thickness = thickness
             )
@@ -325,6 +334,7 @@ fun VisualizerCanvas(
                 bassEnergy = smoothedBass,
                 palette = palette,
                 config = config,
+                center = effectiveCenter,
                 spread = spread,
                 thickness = thickness
             )
@@ -334,6 +344,7 @@ fun VisualizerCanvas(
                 bassEnergy = smoothedBass,
                 palette = palette,
                 config = config,
+                center = effectiveCenter,
                 spread = spread,
                 thickness = thickness
             )
@@ -344,6 +355,7 @@ fun VisualizerCanvas(
                 palette = palette,
                 config = config,
                 timeSec = animTimeSec,
+                center = effectiveCenter,
                 spread = spread,
                 thickness = thickness,
                 spinSpeed = spinSpeed
@@ -364,7 +376,9 @@ private fun DrawScope.drawRingVisualizer(
     palette: VisualizerPalette,
     config: VisualizerConfig,
     timeSec: Float,
+    center: Offset,
     centerRingRatio: Float,
+    explicitCenterRadiusPx: Float?,
     spread: Float,
     thickness: Float,
     spinSpeed: Float
@@ -372,10 +386,13 @@ private fun DrawScope.drawRingVisualizer(
     val count = bands.size
     if (count < 3) return
 
-    val center = Offset(size.width / 2f, size.height / 2f)
     val minDim = min(size.width, size.height)
     val maxDim = max(size.width, size.height)
-    val baseRadius = minDim * centerRingRatio.coerceIn(0.16f, 0.36f) + bassEnergy * (minDim * 0.028f)
+    val baseRadius = if (explicitCenterRadiusPx != null) {
+        explicitCenterRadiusPx + bassEnergy * (minDim * 0.018f)
+    } else {
+        minDim * centerRingRatio.coerceIn(0.16f, 0.36f) + bassEnergy * (minDim * 0.028f)
+    }
     val maxSpike = minDim * 0.23f * spread
     val rotationOffset = timeSec * 0.24f * spinSpeed
     val addBlend = if (config.glowEnabled) BlendMode.Plus else BlendMode.SrcOver
@@ -575,6 +592,7 @@ private fun DrawScope.drawBars(
     bassEnergy: Float,
     palette: VisualizerPalette,
     config: VisualizerConfig,
+    center: Offset,
     spread: Float,
     thickness: Float
 ) {
@@ -587,7 +605,7 @@ private fun DrawScope.drawBars(
     val barWidth = (slotWidth * 0.64f * thickness).coerceIn(2f, slotWidth * 0.92f)
     val gapOffset = (slotWidth - barWidth) / 2f
     val maxHeight = size.height * 0.78f * spread.coerceAtMost(1.25f)
-    val baselineY = if (config.mirrorEnabled) size.height / 2f else size.height * 0.92f
+    val baselineY = if (config.mirrorEnabled) center.y else size.height * 0.80f
 
     if (config.glowEnabled) {
         drawCircle(
@@ -658,12 +676,13 @@ private fun DrawScope.drawWaveform(
     bassEnergy: Float,
     palette: VisualizerPalette,
     config: VisualizerConfig,
+    center: Offset,
     spread: Float,
     thickness: Float
 ) {
     if (wave.isEmpty()) return
     val addBlend = if (config.glowEnabled) BlendMode.Plus else BlendMode.SrcOver
-    val centerY = size.height / 2f
+    val centerY = center.y
     val amplitude = size.height * 0.36f * spread.coerceAtMost(1.35f)
     val stepX = size.width / max(1, wave.size - 1)
 
@@ -724,6 +743,7 @@ private fun DrawScope.drawMirrorSpectrum(
     bassEnergy: Float,
     palette: VisualizerPalette,
     config: VisualizerConfig,
+    center: Offset,
     spread: Float,
     thickness: Float
 ) {
@@ -732,12 +752,12 @@ private fun DrawScope.drawMirrorSpectrum(
 
     val addBlend = if (config.glowEnabled) BlendMode.Plus else BlendMode.SrcOver
     val halfCount = max(1, count / 2)
-    val centerX = size.width / 2f
+    val centerX = center.x
     val halfWidth = size.width / 2f
     val slotWidth = halfWidth / halfCount
     val barWidth = (slotWidth * 0.62f * thickness).coerceIn(2f, slotWidth * 0.92f)
     val maxH = size.height * 0.36f * spread.coerceAtMost(1.35f)
-    val centerY = size.height / 2f
+    val centerY = center.y
 
     if (config.glowEnabled) {
         drawCircle(
@@ -824,6 +844,7 @@ private fun DrawScope.drawParticlePulse(
     palette: VisualizerPalette,
     config: VisualizerConfig,
     timeSec: Float,
+    center: Offset,
     spread: Float,
     thickness: Float,
     spinSpeed: Float
@@ -832,7 +853,7 @@ private fun DrawScope.drawParticlePulse(
     if (count == 0) return
 
     val addBlend = if (config.glowEnabled) BlendMode.Plus else BlendMode.SrcOver
-    val centerY = size.height / 2f
+    val centerY = center.y
     val stepX = size.width / count
 
     wavePath.reset()

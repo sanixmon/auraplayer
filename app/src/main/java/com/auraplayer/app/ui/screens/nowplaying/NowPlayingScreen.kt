@@ -61,9 +61,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -96,6 +99,20 @@ fun NowPlayingScreen(
     var showVisualizerSheet by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableFloatStateOf(0f) }
+    var rootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var stageCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var stageCenterInRoot by remember { mutableStateOf<Offset?>(null) }
+
+    fun updateStageCenter() {
+        val r = rootCoords
+        val s = stageCoords
+        if (r != null && s != null && r.isAttached && s.isAttached) {
+            stageCenterInRoot = r.localPositionOf(
+                s,
+                Offset(s.size.width / 2f, s.size.height / 2f)
+            )
+        }
+    }
 
     val track = playbackState.currentTrack
     val durationMs = playbackState.durationMs.coerceAtLeast(1L)
@@ -126,9 +143,20 @@ fun NowPlayingScreen(
         Modifier
     }
 
+    val stageCoverSize = when {
+        visualizerConfig.visualMode == NowPlayingVisualMode.COVER_ONLY && isDockedSidePane -> 200.dp
+        visualizerConfig.visualMode == NowPlayingVisualMode.COVER_ONLY -> 264.dp
+        isDockedSidePane -> 136.dp
+        else -> 180.dp
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onGloballyPositioned { coords ->
+                rootCoords = coords
+                updateStageCenter()
+            }
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -139,7 +167,7 @@ fun NowPlayingScreen(
                 )
             )
     ) {
-        // Full-bleed unclipped background Visualizer across the entire screen
+        // Full-bleed unclipped background Visualizer aligned pixel-exact with the stage center
         if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER ||
             visualizerConfig.visualMode == NowPlayingVisualMode.VISUALIZER_ONLY
         ) {
@@ -153,9 +181,13 @@ fun NowPlayingScreen(
                 } else {
                     0.22f
                 },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 160.dp)
+                centerRingRadiusDp = if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
+                    stageCoverSize / 2f + 8.dp
+                } else {
+                    null
+                },
+                centerOverride = stageCenterInRoot,
+                modifier = Modifier.fillMaxSize()
             )
         }
 
@@ -251,6 +283,10 @@ fun NowPlayingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .onGloballyPositioned { coords ->
+                        stageCoords = coords
+                        updateStageCenter()
+                    }
                     .then(swipeDownModifier)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -261,6 +297,7 @@ fun NowPlayingScreen(
             ) {
                 AnimatedContent(
                     targetState = visualizerConfig.visualMode,
+                    contentAlignment = Alignment.Center,
                     transitionSpec = {
                         (fadeIn(tween(240)) + scaleIn(initialScale = 0.94f, animationSpec = tween(240)))
                             .togetherWith(fadeOut(tween(180)))
@@ -270,18 +307,12 @@ fun NowPlayingScreen(
                     if (mode == NowPlayingVisualMode.COVER_ONLY ||
                         mode == NowPlayingVisualMode.COVER_AND_VISUALIZER
                     ) {
-                        val coverSize = when {
-                            mode == NowPlayingVisualMode.COVER_ONLY && isDockedSidePane -> 200.dp
-                            mode == NowPlayingVisualMode.COVER_ONLY -> 264.dp
-                            isDockedSidePane -> 136.dp
-                            else -> 180.dp
-                        }
                         CoverArtView(
                             track = track,
                             style = visualizerConfig.coverArtStyle,
                             isPlaying = playbackState.isPlaying,
                             bassEnergy = visualizerFrame.bassEnergy,
-                            size = coverSize
+                            size = stageCoverSize
                         )
                     } else {
                         Box(modifier = Modifier.fillMaxSize())

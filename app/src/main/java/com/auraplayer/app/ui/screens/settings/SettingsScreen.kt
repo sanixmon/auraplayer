@@ -121,6 +121,7 @@ fun SettingsScreen(
                         isPlaying = isPlaying,
                         demoWhenIdle = true,
                         centerRingRadiusRatio = 0.25f,
+                        centerRingRadiusDp = 58.dp,
                         modifier = Modifier.fillMaxSize()
                     )
                     CoverArtView(
