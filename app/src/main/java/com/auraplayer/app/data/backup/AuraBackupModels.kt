@@ -1,5 +1,6 @@
 package com.auraplayer.app.data.backup
 
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -41,20 +42,31 @@ data class BackupVisualizerConfig(
     val smoothing: Float,
     val glowEnabled: Boolean,
     val mirrorEnabled: Boolean,
-    val peakCapsEnabled: Boolean
+    val peakCapsEnabled: Boolean,
+    val emberDirection: String? = null,
+    val customVizPrimaryArgb: Long? = null,
+    val customVizSecondaryArgb: Long? = null
 ) {
-    fun toDomain(): VisualizerConfig = VisualizerConfig(
-        style = VisualizerStyle.entries.firstOrNull { it.name == style } ?: VisualizerStyle.BARS,
-        colorScheme = VisualizerColorScheme.entries.firstOrNull { it.name == colorScheme }
-            ?: VisualizerColorScheme.AURORA,
-        density = VisualizerDensity.entries.firstOrNull { it.name == density }
-            ?: VisualizerDensity.MEDIUM,
-        sensitivity = sensitivity.coerceIn(0.5f, 2.5f),
-        smoothing = smoothing.coerceIn(0.15f, 0.95f),
-        glowEnabled = glowEnabled,
-        mirrorEnabled = mirrorEnabled,
-        peakCapsEnabled = peakCapsEnabled
-    )
+    fun toDomain(): VisualizerConfig {
+        val defaults = VisualizerConfig()
+        return VisualizerConfig(
+            style = VisualizerStyle.entries.firstOrNull { it.name == style } ?: VisualizerStyle.BARS,
+            emberDirection = emberDirection?.let { name ->
+                EmberDirection.entries.firstOrNull { it.name == name }
+            } ?: defaults.emberDirection,
+            colorScheme = VisualizerColorScheme.entries.firstOrNull { it.name == colorScheme }
+                ?: VisualizerColorScheme.AURORA,
+            density = VisualizerDensity.entries.firstOrNull { it.name == density }
+                ?: VisualizerDensity.MEDIUM,
+            sensitivity = sensitivity.coerceIn(0.5f, 2.5f),
+            smoothing = smoothing.coerceIn(0.15f, 0.95f),
+            glowEnabled = glowEnabled,
+            mirrorEnabled = mirrorEnabled,
+            peakCapsEnabled = peakCapsEnabled,
+            customVizPrimaryArgb = customVizPrimaryArgb ?: defaults.customVizPrimaryArgb,
+            customVizSecondaryArgb = customVizSecondaryArgb ?: defaults.customVizSecondaryArgb
+        )
+    }
 
     companion object {
         fun fromDomain(config: VisualizerConfig): BackupVisualizerConfig = BackupVisualizerConfig(
@@ -65,7 +77,10 @@ data class BackupVisualizerConfig(
             smoothing = config.smoothing,
             glowEnabled = config.glowEnabled,
             mirrorEnabled = config.mirrorEnabled,
-            peakCapsEnabled = config.peakCapsEnabled
+            peakCapsEnabled = config.peakCapsEnabled,
+            emberDirection = config.emberDirection.name,
+            customVizPrimaryArgb = config.customVizPrimaryArgb,
+            customVizSecondaryArgb = config.customVizSecondaryArgb
         )
     }
 }

@@ -22,9 +22,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
+import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
@@ -34,6 +37,7 @@ import com.auraplayer.app.ui.theme.LocalAlbumAccentColors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -60,6 +64,36 @@ private class ShockwaveRing(
     var strength: Float = 0f
 )
 
+private const val MAX_EMBER_PARTICLES = 160
+
+private class EmberParticle(
+    var x: Float = 0.5f,
+    var y: Float = 1f,
+    var vx: Float = 0f,
+    var vy: Float = -0.3f,
+    var life: Float = 0f,
+    var lifeSpeed: Float = 0.45f,
+    var baseSizeDp: Float = 2.4f,
+    var turbulencePhase: Float = 0f,
+    var turbulenceFreq: Float = 3.2f,
+    var turbulenceAmp: Float = 0.045f,
+    var flickerPhase: Float = 0f,
+    var flickerSpeed: Float = 11f,
+    var speedScale: Float = 1f,
+    var mirrorSide: Boolean = false,
+    var radialAngle: Float = 0f,
+    var radialProgress: Float = 0f
+)
+
+private fun nextRand01(rngState: IntArray): Float {
+    var x = rngState[0]
+    x = x xor (x shl 13)
+    x = x xor (x ushr 17)
+    x = x xor (x shl 5)
+    rngState[0] = x
+    return ((x ushr 8) and 0xFFFFFF) / 16777216f
+}
+
 fun VisualizerColorScheme.toPalette(
     config: VisualizerConfig,
     dynamicAccent: AccentColors? = null
@@ -84,6 +118,12 @@ fun VisualizerColorScheme.toPalette(
             glow = p
         )
     }
+    VisualizerColorScheme.EMBER -> VisualizerPalette(
+        start = Color(0xFFFDE047),
+        mid = Color(0xFFF97316),
+        end = Color(0xFFDC2626),
+        glow = Color(0xFFF97316)
+    )
     VisualizerColorScheme.AURORA -> VisualizerPalette(
         start = Color(0xFF00E5FF),
         mid = Color(0xFF6366F1),
@@ -192,6 +232,10 @@ fun VisualizerCanvas(
             )
         }
     }
+    val emberParticles = remember { List(MAX_EMBER_PARTICLES) { EmberParticle() } }
+    val emberRng = remember { IntArray(1) { 0x5A17E3B5 } }
+    val lastEmberDirection = remember { arrayOf<EmberDirection?>(null) }
+    val lastEmberMirror = remember { BooleanArray(1) }
 
     var animTimeSec by remember { mutableFloatStateOf(0f) }
     var lastDeltaSec by remember { mutableFloatStateOf(0.016f) }
@@ -199,6 +243,7 @@ fun VisualizerCanvas(
     var frameTick by remember { mutableLongStateOf(0L) }
     var smoothedBass by remember { mutableFloatStateOf(0f) }
     var smoothedPunch by remember { mutableFloatStateOf(0f) }
+    var emberActiveAlpha by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(isPlaying, demoWhenIdle) {
         var lastNanos = 0L
@@ -278,6 +323,10 @@ fun VisualizerCanvas(
         }
         val punchTau = if (targetPunch > smoothedPunch) 0.010f else 0.115f
         smoothedPunch += (targetPunch - smoothedPunch) * (1f - exp(-dt / punchTau))
+
+        val targetEmberAlpha = if (isPlaying || useDemo) 1f else 0f
+        val emberAlphaTau = if (targetEmberAlpha > emberActiveAlpha) 0.08f else 0.32f
+        emberActiveAlpha += (targetEmberAlpha - emberActiveAlpha) * (1f - exp(-dt / emberAlphaTau))
 
         // Trigger beat-synced shockwaves (180 ms cooldown).
         if ((isPlaying || demoWhenIdle) &&
@@ -486,6 +535,43 @@ fun VisualizerCanvas(
                 thickness = thickness,
                 spinSpeed = spinSpeed
             )
+            VisualizerStyle.FIRE_EMBER -> {
+                if (lastEmberDirection[0] != config.emberDirection ||
+                    lastEmberMirror[0] != config.mirrorEnabled
+                ) {
+                    lastEmberDirection[0] = config.emberDirection
+                    lastEmberMirror[0] = config.mirrorEnabled
+                    for (i in emberParticles.indices) {
+                        respawnEmber(
+                            particle = emberParticles[i],
+                            direction = config.emberDirection,
+                            mirrorEnabled = config.mirrorEnabled,
+                            bands = smoothedBands,
+                            rng = emberRng,
+                            prewarm = true
+                        )
+                    }
+                }
+                drawFireEmber(
+                    embers = emberParticles,
+                    bands = smoothedBands,
+                    rng = emberRng,
+                    bassEnergy = smoothedBass,
+                    punch = smoothedPunch,
+                    activeAlpha = emberActiveAlpha,
+                    palette = palette,
+                    config = config,
+                    dt = dt,
+                    timeSec = animTimeSec,
+                    center = effectiveCenter,
+                    centerRingRatio = centerRingRadiusRatio,
+                    explicitCenterRadiusPx = explicitCenterRadiusPx,
+                    spread = spread,
+                    thickness = thickness,
+                    spinSpeed = spinSpeed,
+                    isActive = isPlaying || useDemo
+                )
+            }
         }
     }
 }
@@ -1331,6 +1417,427 @@ private fun DrawScope.drawParticlePulse(
                 radius = radius * 0.78f,
                 center = Offset(x, centerY - (y - centerY))
             )
+        }
+    }
+}
+
+private fun pickSpectrumWeightedPos(bands: FloatArray, rng: IntArray): Float {
+    val base = nextRand01(rng)
+    if (bands.isEmpty()) return base
+    var bestPos = base
+    var bestEnergy = bands[((base * bands.size).toInt()).coerceIn(0, bands.lastIndex)]
+    for (attempt in 0 until 2) {
+        val candidate = nextRand01(rng)
+        val e = bands[((candidate * bands.size).toInt()).coerceIn(0, bands.lastIndex)]
+        if (e > bestEnergy + 0.08f) {
+            bestEnergy = e
+            bestPos = candidate
+        }
+    }
+    return bestPos.coerceIn(0.02f, 0.98f)
+}
+
+private fun oppositeDirection(dir: EmberDirection): EmberDirection = when (dir) {
+    EmberDirection.UP -> EmberDirection.DOWN
+    EmberDirection.DOWN -> EmberDirection.UP
+    EmberDirection.LEFT -> EmberDirection.RIGHT
+    EmberDirection.RIGHT -> EmberDirection.LEFT
+    EmberDirection.RADIAL -> EmberDirection.RADIAL
+}
+
+private fun respawnEmber(
+    particle: EmberParticle,
+    direction: EmberDirection,
+    mirrorEnabled: Boolean,
+    bands: FloatArray,
+    rng: IntArray,
+    prewarm: Boolean
+) {
+    val isMirror = mirrorEnabled && nextRand01(rng) < 0.5f
+    particle.mirrorSide = isMirror
+    particle.speedScale = 0.55f + nextRand01(rng) * 0.95f
+    particle.lifeSpeed = 0.30f + nextRand01(rng) * 0.44f
+    particle.baseSizeDp = 1.5f + nextRand01(rng).pow(1.4f) * 3.1f
+    particle.turbulencePhase = nextRand01(rng) * (2f * PI.toFloat())
+    particle.turbulenceFreq = 1.9f + nextRand01(rng) * 3.1f
+    particle.turbulenceAmp = 0.035f + nextRand01(rng) * 0.075f
+    particle.flickerPhase = nextRand01(rng) * (2f * PI.toFloat())
+    particle.flickerSpeed = 7.5f + nextRand01(rng) * 10.5f
+
+    val edgePos = pickSpectrumWeightedPos(bands, rng)
+    val effectiveDir = if (isMirror) oppositeDirection(direction) else direction
+    val primarySpeed = (0.24f + nextRand01(rng) * 0.34f) * particle.speedScale
+    val crossDrift = (nextRand01(rng) - 0.5f) * 0.10f
+
+    when (effectiveDir) {
+        EmberDirection.UP -> {
+            particle.x = edgePos
+            particle.y = if (prewarm) 0.04f + nextRand01(rng) * 0.98f else 1.03f
+            particle.vx = crossDrift
+            particle.vy = -primarySpeed
+            particle.life = if (prewarm) (1f - particle.y).coerceIn(0f, 0.94f) else 0f
+        }
+        EmberDirection.DOWN -> {
+            particle.x = edgePos
+            particle.y = if (prewarm) -0.02f + nextRand01(rng) * 0.98f else -0.03f
+            particle.vx = crossDrift
+            particle.vy = primarySpeed
+            particle.life = if (prewarm) particle.y.coerceIn(0f, 0.94f) else 0f
+        }
+        EmberDirection.LEFT -> {
+            particle.x = if (prewarm) 0.04f + nextRand01(rng) * 0.98f else 1.03f
+            particle.y = edgePos
+            particle.vx = -primarySpeed
+            particle.vy = crossDrift
+            particle.life = if (prewarm) (1f - particle.x).coerceIn(0f, 0.94f) else 0f
+        }
+        EmberDirection.RIGHT -> {
+            particle.x = if (prewarm) -0.02f + nextRand01(rng) * 0.98f else -0.03f
+            particle.y = edgePos
+            particle.vx = primarySpeed
+            particle.vy = crossDrift
+            particle.life = if (prewarm) particle.x.coerceIn(0f, 0.94f) else 0f
+        }
+        EmberDirection.RADIAL -> {
+            particle.radialAngle = edgePos * (2f * PI.toFloat())
+            particle.radialProgress = if (prewarm) nextRand01(rng) * 0.94f else 0f
+            particle.life = particle.radialProgress
+            particle.vx = cos(particle.radialAngle) * primarySpeed
+            particle.vy = sin(particle.radialAngle) * primarySpeed
+        }
+    }
+}
+
+private fun DrawScope.drawAmbientHeatEdge(
+    direction: EmberDirection,
+    palette: VisualizerPalette,
+    heatAlpha: Float,
+    center: Offset,
+    radialStartRadius: Float,
+    minDim: Float,
+    punch: Float
+) {
+    if (heatAlpha <= 0.005f) return
+    val midAlpha = (heatAlpha * 0.42f).coerceIn(0f, 0.5f)
+    when (direction) {
+        EmberDirection.UP -> {
+            val topY = size.height * 0.54f
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        palette.end.copy(alpha = midAlpha),
+                        palette.glow.copy(alpha = heatAlpha)
+                    ),
+                    startY = topY,
+                    endY = size.height
+                ),
+                topLeft = Offset(0f, topY),
+                size = Size(size.width, size.height - topY)
+            )
+        }
+        EmberDirection.DOWN -> {
+            val bottomY = size.height * 0.46f
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        palette.glow.copy(alpha = heatAlpha),
+                        palette.end.copy(alpha = midAlpha),
+                        Color.Transparent
+                    ),
+                    startY = 0f,
+                    endY = bottomY
+                ),
+                topLeft = Offset.Zero,
+                size = Size(size.width, bottomY)
+            )
+        }
+        EmberDirection.LEFT -> {
+            val startX = size.width * 0.56f
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        palette.end.copy(alpha = midAlpha),
+                        palette.glow.copy(alpha = heatAlpha)
+                    ),
+                    startX = startX,
+                    endX = size.width
+                ),
+                topLeft = Offset(startX, 0f),
+                size = Size(size.width - startX, size.height)
+            )
+        }
+        EmberDirection.RIGHT -> {
+            val endX = size.width * 0.44f
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        palette.glow.copy(alpha = heatAlpha),
+                        palette.end.copy(alpha = midAlpha),
+                        Color.Transparent
+                    ),
+                    startX = 0f,
+                    endX = endX
+                ),
+                topLeft = Offset.Zero,
+                size = Size(endX, size.height)
+            )
+        }
+        EmberDirection.RADIAL -> {
+            val haloRadius = radialStartRadius + minDim * (0.34f + punch * 0.12f)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        palette.glow.copy(alpha = (heatAlpha * 1.15f).coerceIn(0f, 0.55f)),
+                        palette.end.copy(alpha = midAlpha),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = haloRadius
+                ),
+                radius = haloRadius,
+                center = center
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawFireEmber(
+    embers: List<EmberParticle>,
+    bands: FloatArray,
+    rng: IntArray,
+    bassEnergy: Float,
+    punch: Float,
+    activeAlpha: Float,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    dt: Float,
+    timeSec: Float,
+    center: Offset,
+    centerRingRatio: Float,
+    explicitCenterRadiusPx: Float?,
+    spread: Float,
+    thickness: Float,
+    spinSpeed: Float,
+    isActive: Boolean
+) {
+    if (activeAlpha <= 0.005f) return
+
+    val pxDensity = density
+    val minDim = min(size.width, size.height)
+    val direction = config.emberDirection
+    val activeCount = when (config.density) {
+        VisualizerDensity.LOW -> 48
+        VisualizerDensity.MEDIUM -> 80
+        VisualizerDensity.HIGH -> 116
+        VisualizerDensity.ULTRA -> MAX_EMBER_PARTICLES
+    }.coerceAtMost(embers.size)
+
+    val radialStartRadius = if (explicitCenterRadiusPx != null) {
+        explicitCenterRadiusPx * (1f + punch * 0.145f) + 2f * pxDensity
+    } else {
+        minDim * centerRingRatio.coerceIn(0.14f, 0.28f) * 0.52f + punch * (minDim * 0.03f)
+    }
+    val radialMaxRadius = hypot(
+        max(center.x, size.width - center.x),
+        max(center.y, size.height - center.y)
+    ) * (0.76f + spread * 0.26f)
+
+    // 1. Soft ambient heat glow at emitter edge (or around cover art for Radial)
+    if (config.glowEnabled) {
+        val heatAlpha = ((0.18f + bassEnergy * 0.16f + punch * 0.22f) * activeAlpha).coerceIn(0f, 0.48f)
+        drawAmbientHeatEdge(
+            direction = direction,
+            palette = palette,
+            heatAlpha = heatAlpha,
+            center = center,
+            radialStartRadius = radialStartRadius,
+            minDim = minDim,
+            punch = punch
+        )
+        if (config.mirrorEnabled && direction != EmberDirection.RADIAL) {
+            drawAmbientHeatEdge(
+                direction = oppositeDirection(direction),
+                palette = palette,
+                heatAlpha = heatAlpha * 0.8f,
+                center = center,
+                radialStartRadius = radialStartRadius,
+                minDim = minDim,
+                punch = punch
+            )
+        }
+        if (direction == EmberDirection.RADIAL && explicitCenterRadiusPx != null) {
+            drawCircle(
+                color = palette.glow.copy(alpha = ((0.22f + punch * 0.24f) * activeAlpha).coerceIn(0f, 0.55f)),
+                radius = radialStartRadius,
+                center = center,
+                style = Stroke(width = (3.6f + punch * 2.2f) * pxDensity * thickness)
+            )
+        }
+    }
+
+    // 2. Advance physics & render glowing ember particles
+    val speedMult = (0.35f + spinSpeed * 0.65f) * (0.70f + bassEnergy * 0.65f + punch * 1.25f)
+    val isBeatBurst = isActive && punch > 0.46f
+
+    for (i in 0 until activeCount) {
+        val p = embers[i]
+        val sway = sin(timeSec * p.turbulenceFreq + p.turbulencePhase) *
+            p.turbulenceAmp * spread * (0.85f + bassEnergy * 0.45f)
+
+        var posX: Float
+        var posY: Float
+        var dirX: Float
+        var dirY: Float
+
+        if (direction == EmberDirection.RADIAL) {
+            if (isActive || activeAlpha > 0.01f) {
+                val swirlDir = if (p.mirrorSide) -1f else 1f
+                p.radialProgress += p.lifeSpeed * dt * speedMult * 0.78f
+                p.radialAngle += sway * dt * 1.6f * swirlDir
+                p.life = p.radialProgress
+                if (p.life >= 1f || (isBeatBurst && p.life > 0.80f && (i and 3) == 0)) {
+                    respawnEmber(p, direction, config.mirrorEnabled, bands, rng, prewarm = false)
+                }
+            }
+            val easedProgress = p.radialProgress.pow(0.88f)
+            val r = radialStartRadius + easedProgress * (radialMaxRadius - radialStartRadius)
+            val cosA = cos(p.radialAngle)
+            val sinA = sin(p.radialAngle)
+            posX = center.x + cosA * r
+            posY = center.y + sinA * r
+            dirX = cosA
+            dirY = sinA
+        } else {
+            val effectiveDir = if (p.mirrorSide) oppositeDirection(direction) else direction
+            val isVertical = effectiveDir == EmberDirection.UP || effectiveDir == EmberDirection.DOWN
+            val stepVx = (p.vx + if (isVertical) sway else 0f) * speedMult
+            val stepVy = (p.vy + if (!isVertical) sway else 0f) * speedMult
+            if (isActive || activeAlpha > 0.01f) {
+                p.x += stepVx * dt
+                p.y += stepVy * dt
+                p.life += p.lifeSpeed * dt * (0.70f + speedMult * 0.42f)
+                val outOfBounds = p.x < -0.10f || p.x > 1.10f || p.y < -0.10f || p.y > 1.10f
+                if (p.life >= 1f || outOfBounds || (isBeatBurst && p.life > 0.80f && (i and 3) == 0)) {
+                    respawnEmber(p, direction, config.mirrorEnabled, bands, rng, prewarm = false)
+                }
+            }
+            posX = p.x * size.width
+            posY = p.y * size.height
+            val velPxX = stepVx * size.width
+            val velPxY = stepVy * size.height
+            val velMag = hypot(velPxX, velPxY).coerceAtLeast(0.001f)
+            dirX = velPxX / velMag
+            dirY = velPxY / velMag
+        }
+
+        val life = p.life.coerceIn(0f, 1f)
+        val birthFade = (life / 0.10f).coerceIn(0f, 1f)
+        val deathFade = (1f - life).pow(1.25f)
+        val flicker = 0.72f + 0.28f * sin(timeSec * p.flickerSpeed + p.flickerPhase)
+        val alpha = (birthFade * deathFade * flicker * activeAlpha).coerceIn(0f, 0.98f)
+        if (alpha <= 0.01f) continue
+
+        // Heat-to-cool color progression across the ember's lifetime
+        val emberColor = if (life < 0.42f) {
+            lerp(palette.start, palette.mid, life / 0.42f)
+        } else {
+            lerp(palette.mid, palette.end, (life - 0.42f) / 0.58f)
+        }
+
+        val radius = (p.baseSizeDp * pxDensity * thickness *
+            (0.55f + (1f - life) * 0.65f) *
+            (0.84f + punch * 0.44f)).coerceAtLeast(1.1f * pxDensity)
+        val pos = Offset(posX, posY)
+        val hotCoreAlpha = (alpha * (1f - life * 0.62f) * 0.88f).coerceIn(0f, 0.92f)
+
+        when (config.fillMode) {
+            VisualizerFillMode.LINE -> {
+                val tailLen = (5.5f + p.speedScale * 8.5f + punch * 7.5f) *
+                    pxDensity * thickness * (0.6f + (1f - life) * 0.6f)
+                val tailPos = Offset(posX - dirX * tailLen, posY - dirY * tailLen)
+
+                if (config.glowEnabled) {
+                    drawLine(
+                        color = emberColor.copy(alpha = alpha * 0.24f),
+                        start = tailPos,
+                        end = pos,
+                        strokeWidth = radius * 2.9f,
+                        cap = StrokeCap.Round
+                    )
+                    drawCircle(
+                        color = emberColor.copy(alpha = alpha * 0.28f),
+                        radius = radius * 2.2f,
+                        center = pos
+                    )
+                }
+                drawLine(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color.Transparent, emberColor.copy(alpha = alpha * 0.92f)),
+                        start = tailPos,
+                        end = pos
+                    ),
+                    start = tailPos,
+                    end = pos,
+                    strokeWidth = radius * 1.45f,
+                    cap = StrokeCap.Round
+                )
+                drawCircle(
+                    color = emberColor.copy(alpha = alpha),
+                    radius = radius,
+                    center = pos
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = hotCoreAlpha),
+                    radius = radius * 0.48f,
+                    center = pos
+                )
+            }
+            VisualizerFillMode.SOLID -> {
+                if (config.glowEnabled) {
+                    drawCircle(
+                        color = emberColor.copy(alpha = alpha * 0.18f),
+                        radius = radius * 3.1f,
+                        center = pos
+                    )
+                    drawCircle(
+                        color = emberColor.copy(alpha = alpha * 0.34f),
+                        radius = radius * 1.9f,
+                        center = pos
+                    )
+                }
+                drawCircle(
+                    color = emberColor.copy(alpha = alpha),
+                    radius = radius * 1.2f,
+                    center = pos
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = hotCoreAlpha),
+                    radius = radius * 0.56f,
+                    center = pos
+                )
+            }
+            VisualizerFillMode.NONE -> {
+                val sparkR = (radius * 0.72f).coerceAtLeast(1.0f * pxDensity)
+                if (config.glowEnabled) {
+                    drawCircle(
+                        color = emberColor.copy(alpha = alpha * 0.20f),
+                        radius = sparkR * 1.65f,
+                        center = pos
+                    )
+                }
+                drawCircle(
+                    color = emberColor.copy(alpha = alpha),
+                    radius = sparkR,
+                    center = pos
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = hotCoreAlpha),
+                    radius = sparkR * 0.42f,
+                    center = pos
+                )
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
@@ -64,12 +65,22 @@ class NowPlayingViewModel(
         viewModelScope.launch { visualizerPreferences.updateStyle(style) }
     }
 
+    fun selectEmberDirection(direction: EmberDirection) {
+        viewModelScope.launch { visualizerPreferences.updateEmberDirection(direction) }
+    }
+
     fun selectFillMode(fillMode: VisualizerFillMode) {
         viewModelScope.launch { visualizerPreferences.updateFillMode(fillMode) }
     }
 
     fun selectVisualizerColorScheme(scheme: VisualizerColorScheme) {
         viewModelScope.launch { visualizerPreferences.updateColorScheme(scheme) }
+    }
+
+    fun setCustomVisualizerColors(primaryArgb: Long, secondaryArgb: Long) {
+        viewModelScope.launch {
+            visualizerPreferences.updateCustomVisualizerColors(primaryArgb, secondaryArgb)
+        }
     }
 
     fun selectCoverArtStyle(style: CoverArtStyle) {

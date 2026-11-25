@@ -5,7 +5,16 @@ enum class VisualizerStyle(val displayName: String) {
     BARS("Bars"),
     WAVEFORM("Wave"),
     MIRROR_SPECTRUM("Mirror"),
-    PARTICLE_PULSE("Pulse")
+    PARTICLE_PULSE("Pulse"),
+    FIRE_EMBER("Fire Ember")
+}
+
+enum class EmberDirection(val displayName: String) {
+    UP("Up"),
+    DOWN("Down"),
+    LEFT("Left"),
+    RIGHT("Right"),
+    RADIAL("Radial")
 }
 
 enum class VisualizerFillMode(val displayName: String) {
@@ -17,6 +26,7 @@ enum class VisualizerFillMode(val displayName: String) {
 enum class VisualizerColorScheme(val displayName: String) {
     DYNAMIC("Dynamic"),
     CUSTOM("Custom"),
+    EMBER("Ember"),
     AURORA("Aurora"),
     SOLAR_FLARE("Solar"),
     NEON_CYBER("Neon"),
@@ -65,6 +75,7 @@ enum class AppAccentPreset(
  */
 data class VisualizerConfig(
     val style: VisualizerStyle = VisualizerStyle.CIRCULAR_AURA,
+    val emberDirection: EmberDirection = EmberDirection.UP,
     val fillMode: VisualizerFillMode = VisualizerFillMode.LINE,
     val colorScheme: VisualizerColorScheme = VisualizerColorScheme.DYNAMIC,
     val density: VisualizerDensity = VisualizerDensity.HIGH,

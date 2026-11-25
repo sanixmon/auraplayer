@@ -6,13 +6,17 @@ import com.auraplayer.app.data.local.db.TrackDao
 import com.auraplayer.app.data.local.db.TrackEntity
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.AudioFormat
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.TrackFingerprint
 import com.auraplayer.app.data.model.VisualizerColorScheme
+import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerStyle
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -116,5 +120,30 @@ class AuraBackupManagerTest {
         coVerify { visualizerPrefs.updateStyle(VisualizerStyle.CIRCULAR_AURA) }
         coVerify { visualizerPrefs.updateColorScheme(VisualizerColorScheme.SOLAR_FLARE) }
         coVerify { visualizerPrefs.updateDensity(VisualizerDensity.HIGH) }
+    }
+
+    @Test
+    fun `exportFullBackupJson and importFromJson round-trip Fire Ember direction and custom colors`() = runTest {
+        coEvery { playlistDao.getAllPlaylistsSnapshot() } returns emptyList()
+        every { visualizerPrefs.configFlow } returns flowOf(
+            VisualizerConfig(
+                style = VisualizerStyle.FIRE_EMBER,
+                emberDirection = EmberDirection.LEFT,
+                colorScheme = VisualizerColorScheme.CUSTOM,
+                density = VisualizerDensity.ULTRA,
+                customVizPrimaryArgb = 0xFFFFAA00,
+                customVizSecondaryArgb = 0xFFCC2200
+            )
+        )
+
+        val exportedJson = backupManager.exportFullBackupJson()
+        val result = backupManager.importFromJson(exportedJson)
+
+        assertTrue(result.visualizerRestored)
+        coVerify { visualizerPrefs.updateStyle(VisualizerStyle.FIRE_EMBER) }
+        coVerify { visualizerPrefs.updateEmberDirection(EmberDirection.LEFT) }
+        coVerify { visualizerPrefs.updateCustomVisualizerColors(0xFFFFAA00, 0xFFCC2200) }
+        coVerify { visualizerPrefs.updateColorScheme(VisualizerColorScheme.CUSTOM) }
+        coVerify { visualizerPrefs.updateDensity(VisualizerDensity.ULTRA) }
     }
 }

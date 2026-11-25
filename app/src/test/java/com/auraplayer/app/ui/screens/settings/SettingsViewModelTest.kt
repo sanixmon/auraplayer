@@ -4,6 +4,7 @@ import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
 import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -42,9 +43,10 @@ class SettingsViewModelTest {
             playbackController = playbackController
         )
 
-        viewModel.setStyle(VisualizerStyle.CIRCULAR_AURA)
+        viewModel.setStyle(VisualizerStyle.FIRE_EMBER)
+        viewModel.setEmberDirection(EmberDirection.RADIAL)
         viewModel.setFillMode(VisualizerFillMode.SOLID)
-        viewModel.setColorScheme(VisualizerColorScheme.NEON_CYBER)
+        viewModel.setColorScheme(VisualizerColorScheme.EMBER)
         viewModel.setDensity(VisualizerDensity.ULTRA)
         viewModel.setSensitivity(1.8f)
         viewModel.setSmoothing(0.45f)
@@ -63,9 +65,10 @@ class SettingsViewModelTest {
         viewModel.setCustomVisualizerColors(0xFFAABBCC, 0xFFDDEEFF)
         viewModel.resetDefaults()
 
-        coVerify { preferences.updateStyle(VisualizerStyle.CIRCULAR_AURA) }
+        coVerify { preferences.updateStyle(VisualizerStyle.FIRE_EMBER) }
+        coVerify { preferences.updateEmberDirection(EmberDirection.RADIAL) }
         coVerify { preferences.updateFillMode(VisualizerFillMode.SOLID) }
-        coVerify { preferences.updateColorScheme(VisualizerColorScheme.NEON_CYBER) }
+        coVerify { preferences.updateColorScheme(VisualizerColorScheme.EMBER) }
         coVerify { preferences.updateDensity(VisualizerDensity.ULTRA) }
         coVerify { preferences.updateSensitivity(1.8f) }
         coVerify { preferences.updateSmoothing(0.45f) }

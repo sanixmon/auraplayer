@@ -21,6 +21,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -47,8 +48,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -105,14 +108,18 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.playback.RepeatMode
 import com.auraplayer.app.ui.components.CoverArtView
+import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.TrackListItem
 import com.auraplayer.app.ui.components.VisualizerCanvas
+import com.auraplayer.app.ui.components.toPalette
+import com.auraplayer.app.ui.theme.LocalAlbumAccentColors
 import com.auraplayer.app.ui.util.formatDurationMs
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -136,6 +143,7 @@ fun NowPlayingScreen(
 
     var showQueueSheet by remember { mutableStateOf(false) }
     var showVisualizerSheet by remember { mutableStateOf(false) }
+    var showCustomColorPicker by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableFloatStateOf(0f) }
 
@@ -174,6 +182,7 @@ fun NowPlayingScreen(
         playbackState.isPlaying &&
         !showQueueSheet &&
         !showVisualizerSheet &&
+        !showCustomColorPicker &&
         !isScrubbing
 
     LaunchedEffect(canAutoFullscreen) {
@@ -731,11 +740,14 @@ fun NowPlayingScreen(
         }
     }
 
+    val dynamicAccent = LocalAlbumAccentColors.current
+
     if (showVisualizerSheet) {
         ModalBottomSheet(onDismissRequest = { showVisualizerSheet = false }) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -769,6 +781,28 @@ fun NowPlayingScreen(
                     }
                 }
 
+                AnimatedVisibility(
+                    visible = visualizerConfig.style == VisualizerStyle.FIRE_EMBER,
+                    enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+                    exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Direction", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            EmberDirection.entries.forEach { dir ->
+                                FilterChip(
+                                    selected = visualizerConfig.emberDirection == dir,
+                                    onClick = { viewModel.selectEmberDirection(dir) },
+                                    label = { Text(dir.displayName) }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Text("Fill", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -789,16 +823,62 @@ fun NowPlayingScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     VisualizerColorScheme.entries.forEach { scheme ->
+                        val palette = scheme.toPalette(
+                            config = visualizerConfig,
+                            dynamicAccent = dynamicAccent
+                        )
                         FilterChip(
                             selected = visualizerConfig.colorScheme == scheme,
-                            onClick = { viewModel.selectVisualizerColorScheme(scheme) },
-                            label = { Text(scheme.displayName) }
+                            onClick = {
+                                if (scheme == VisualizerColorScheme.CUSTOM) {
+                                    showCustomColorPicker = true
+                                } else {
+                                    viewModel.selectVisualizerColorScheme(scheme)
+                                }
+                            },
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            Brush.linearGradient(listOf(palette.start, palette.end))
+                                        )
+                                        .border(
+                                            1.dp,
+                                            Color.White.copy(alpha = 0.35f),
+                                            CircleShape
+                                        )
+                                )
+                            },
+                            label = {
+                                Text(
+                                    if (scheme == VisualizerColorScheme.CUSTOM) {
+                                        "Custom..."
+                                    } else {
+                                        scheme.displayName
+                                    }
+                                )
+                            }
                         )
                     }
                 }
                 Spacer(Modifier.height(20.dp))
             }
         }
+    }
+
+    if (showCustomColorPicker) {
+        DualColorWheelDialog(
+            title = "Visualizer Colors",
+            initialPrimaryArgb = visualizerConfig.customVizPrimaryArgb,
+            initialSecondaryArgb = visualizerConfig.customVizSecondaryArgb,
+            onDismiss = { showCustomColorPicker = false },
+            onConfirm = { p, s ->
+                viewModel.setCustomVisualizerColors(p, s)
+                showCustomColorPicker = false
+            }
+        )
     }
 
     if (showQueueSheet) {

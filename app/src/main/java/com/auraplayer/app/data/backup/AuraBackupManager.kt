@@ -132,6 +132,15 @@ class AuraBackupManager(
         doc.visualizerConfig?.let { savedConfig ->
             val domain = savedConfig.toDomain()
             visualizerPreferences.updateStyle(domain.style)
+            if (savedConfig.emberDirection != null) {
+                visualizerPreferences.updateEmberDirection(domain.emberDirection)
+            }
+            if (savedConfig.customVizPrimaryArgb != null && savedConfig.customVizSecondaryArgb != null) {
+                visualizerPreferences.updateCustomVisualizerColors(
+                    domain.customVizPrimaryArgb,
+                    domain.customVizSecondaryArgb
+                )
+            }
             visualizerPreferences.updateColorScheme(domain.colorScheme)
             visualizerPreferences.updateDensity(domain.density)
             visualizerPreferences.updateSensitivity(domain.sensitivity)

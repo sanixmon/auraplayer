@@ -7,6 +7,7 @@ import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
 import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
@@ -55,6 +56,10 @@ class SettingsViewModel(
 
     fun setStyle(style: VisualizerStyle) {
         viewModelScope.launch { preferences.updateStyle(style) }
+    }
+
+    fun setEmberDirection(direction: EmberDirection) {
+        viewModelScope.launch { preferences.updateEmberDirection(direction) }
     }
 
     fun setFillMode(fillMode: VisualizerFillMode) {

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
 import com.auraplayer.app.data.model.CoverArtStyle
+import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
@@ -30,6 +31,7 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     private object Keys {
         val STYLE = stringPreferencesKey("visualizer_style")
+        val EMBER_DIRECTION = stringPreferencesKey("visualizer_ember_direction")
         val FILL_MODE = stringPreferencesKey("visualizer_fill_mode")
         val COLOR_SCHEME = stringPreferencesKey("visualizer_color_scheme")
         val DENSITY = stringPreferencesKey("visualizer_density")
@@ -63,6 +65,9 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             style = prefs[Keys.STYLE]?.let { name ->
                 VisualizerStyle.entries.firstOrNull { it.name == name }
             } ?: defaults.style,
+            emberDirection = prefs[Keys.EMBER_DIRECTION]?.let { name ->
+                EmberDirection.entries.firstOrNull { it.name == name }
+            } ?: defaults.emberDirection,
             fillMode = prefs[Keys.FILL_MODE]?.let { name ->
                 VisualizerFillMode.entries.firstOrNull { it.name == name }
             } ?: defaults.fillMode,
@@ -105,6 +110,10 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     suspend fun updateStyle(style: VisualizerStyle) {
         context.visualizerDataStore.edit { it[Keys.STYLE] = style.name }
+    }
+
+    suspend fun updateEmberDirection(direction: EmberDirection) {
+        context.visualizerDataStore.edit { it[Keys.EMBER_DIRECTION] = direction.name }
     }
 
     suspend fun updateFillMode(fillMode: VisualizerFillMode) {
