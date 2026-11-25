@@ -20,6 +20,7 @@ import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
+import com.auraplayer.app.data.model.VisualizerTuningPreset
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -37,6 +38,9 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         val DENSITY = stringPreferencesKey("visualizer_density")
         val SENSITIVITY = floatPreferencesKey("visualizer_sensitivity")
         val SMOOTHING = floatPreferencesKey("visualizer_smoothing")
+        val BEAT_PUNCH = floatPreferencesKey("visualizer_beat_punch")
+        val BEAT_SENSITIVITY = floatPreferencesKey("visualizer_beat_sensitivity")
+        val BASS_BOOST = floatPreferencesKey("visualizer_bass_boost")
         val SPREAD_SCALE = floatPreferencesKey("visualizer_spread_scale")
         val STROKE_THICKNESS = floatPreferencesKey("visualizer_stroke_thickness")
         val ROTATION_SPEED = floatPreferencesKey("visualizer_rotation_speed")
@@ -79,12 +83,15 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             } ?: defaults.density,
             sensitivity = (prefs[Keys.SENSITIVITY] ?: defaults.sensitivity).coerceIn(0.5f, 2.5f),
             smoothing = (prefs[Keys.SMOOTHING] ?: defaults.smoothing).coerceIn(0.15f, 0.95f),
+            beatPunch = (prefs[Keys.BEAT_PUNCH] ?: defaults.beatPunch).coerceIn(0f, 2.0f),
+            beatSensitivity = (prefs[Keys.BEAT_SENSITIVITY] ?: defaults.beatSensitivity).coerceIn(0.5f, 2.0f),
+            bassBoost = (prefs[Keys.BASS_BOOST] ?: defaults.bassBoost).coerceIn(0.5f, 2.0f),
             spreadScale = (prefs[Keys.SPREAD_SCALE] ?: defaults.spreadScale).coerceIn(0.5f, 1.5f),
             strokeThickness = (prefs[Keys.STROKE_THICKNESS] ?: defaults.strokeThickness)
                 .coerceIn(0.6f, 1.8f),
             rotationSpeed = (prefs[Keys.ROTATION_SPEED] ?: defaults.rotationSpeed)
                 .coerceIn(0f, 2.5f),
-            syncOffsetMs = (prefs[Keys.SYNC_OFFSET_MS] ?: defaults.syncOffsetMs).coerceIn(0, 350),
+            syncOffsetMs = (prefs[Keys.SYNC_OFFSET_MS] ?: defaults.syncOffsetMs).coerceIn(-100, 350),
             glowEnabled = prefs[Keys.GLOW_ENABLED] ?: defaults.glowEnabled,
             particlesEnabled = prefs[Keys.PARTICLES_ENABLED] ?: defaults.particlesEnabled,
             mirrorEnabled = prefs[Keys.MIRROR_ENABLED] ?: defaults.mirrorEnabled,
@@ -121,7 +128,29 @@ class VisualizerPreferencesDataSource(private val context: Context) {
     }
 
     suspend fun updateSyncOffsetMs(offsetMs: Int) {
-        context.visualizerDataStore.edit { it[Keys.SYNC_OFFSET_MS] = offsetMs.coerceIn(0, 350) }
+        context.visualizerDataStore.edit { it[Keys.SYNC_OFFSET_MS] = offsetMs.coerceIn(-100, 350) }
+    }
+
+    suspend fun updateBeatPunch(punch: Float) {
+        context.visualizerDataStore.edit { it[Keys.BEAT_PUNCH] = punch.coerceIn(0f, 2.0f) }
+    }
+
+    suspend fun updateBeatSensitivity(sensitivity: Float) {
+        context.visualizerDataStore.edit { it[Keys.BEAT_SENSITIVITY] = sensitivity.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun updateBassBoost(boost: Float) {
+        context.visualizerDataStore.edit { it[Keys.BASS_BOOST] = boost.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun applyTuningPreset(preset: VisualizerTuningPreset) {
+        context.visualizerDataStore.edit {
+            it[Keys.SENSITIVITY] = preset.sensitivity
+            it[Keys.SMOOTHING] = preset.smoothing
+            it[Keys.BEAT_PUNCH] = preset.beatPunch
+            it[Keys.BEAT_SENSITIVITY] = preset.beatSensitivity
+            it[Keys.BASS_BOOST] = preset.bassBoost
+        }
     }
 
     suspend fun updateColorScheme(scheme: VisualizerColorScheme) {
@@ -204,6 +233,51 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             it[Keys.COLOR_SCHEME] = VisualizerColorScheme.CUSTOM.name
             it[Keys.CUSTOM_VIZ_PRIMARY] = primaryArgb
             it[Keys.CUSTOM_VIZ_SECONDARY] = secondaryArgb
+        }
+    }
+
+    suspend fun resetThemeAndCover() {
+        context.visualizerDataStore.edit {
+            it.remove(Keys.ACCENT_MODE)
+            it.remove(Keys.ACCENT_PRESET)
+            it.remove(Keys.CUSTOM_APP_PRIMARY)
+            it.remove(Keys.CUSTOM_APP_SECONDARY)
+            it.remove(Keys.COVER_ART_STYLE)
+        }
+    }
+
+    suspend fun resetVisualizerStyle() {
+        context.visualizerDataStore.edit {
+            it.remove(Keys.STYLE)
+            it.remove(Keys.EMBER_DIRECTION)
+            it.remove(Keys.FILL_MODE)
+            it.remove(Keys.COLOR_SCHEME)
+            it.remove(Keys.DENSITY)
+            it.remove(Keys.CUSTOM_VIZ_PRIMARY)
+            it.remove(Keys.CUSTOM_VIZ_SECONDARY)
+        }
+    }
+
+    suspend fun resetBeatAndAudio() {
+        context.visualizerDataStore.edit {
+            it.remove(Keys.SENSITIVITY)
+            it.remove(Keys.SMOOTHING)
+            it.remove(Keys.BEAT_PUNCH)
+            it.remove(Keys.BEAT_SENSITIVITY)
+            it.remove(Keys.BASS_BOOST)
+            it.remove(Keys.SYNC_OFFSET_MS)
+        }
+    }
+
+    suspend fun resetMotionAndEffects() {
+        context.visualizerDataStore.edit {
+            it.remove(Keys.SPREAD_SCALE)
+            it.remove(Keys.STROKE_THICKNESS)
+            it.remove(Keys.ROTATION_SPEED)
+            it.remove(Keys.GLOW_ENABLED)
+            it.remove(Keys.PARTICLES_ENABLED)
+            it.remove(Keys.MIRROR_ENABLED)
+            it.remove(Keys.PEAK_CAPS_ENABLED)
         }
     }
 

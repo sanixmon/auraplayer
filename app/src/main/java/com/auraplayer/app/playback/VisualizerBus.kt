@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Thread-safe bridge between the off-thread FFT analyzer and Compose UI layer.
@@ -19,6 +18,12 @@ class VisualizerBus {
 
     @Volatile
     var targetBandCount: Int = 64
+
+    @Volatile
+    var beatSensitivity: Float = 1.0f
+
+    @Volatile
+    var bassBoost: Float = 1.0f
 
     private val lock = Any()
     private val history = Array<VisualizerFrame?>(HISTORY_CAPACITY) { null }
@@ -78,12 +83,13 @@ class VisualizerBus {
                 f1 = latest
                 tFraction = 0f
             } else {
-                // Micro-lookback of 12 ms when delayMs == 0 enables smooth 60->120 Hz sub-frame tweening.
-                val effectiveDelay = max(12, delayMs.coerceIn(0, 500))
+                // Frames carry sample-accurate audible playout timestamps; user delayMs adds
+                // fine negative/positive offset for speaker or Bluetooth latency.
+                val effectiveDelay = delayMs.coerceIn(-150, 500)
                 val targetTs = (nowElapsedMs - effectiveDelay).coerceAtMost(newestTs)
 
                 // If stream paused cleanly and stale history exceeds 350 ms past target, treat as settled.
-                if (nowElapsedMs - newestTs > effectiveDelay + 350L) {
+                if (nowElapsedMs - newestTs > max(0, effectiveDelay) + 350L) {
                     return false
                 }
 
@@ -138,7 +144,7 @@ class VisualizerBus {
             outScalars[SCALAR_MID] = a.midEnergy * inv + b.midEnergy * tFraction
             outScalars[SCALAR_TREBLE] = a.trebleEnergy * inv + b.trebleEnergy * tFraction
             outScalars[SCALAR_RMS] = a.rmsLevel * inv + b.rmsLevel * tFraction
-            outScalars[SCALAR_BEAT] = max(a.beatPulse, b.beatPulse * min(1f, tFraction + 0.5f))
+            outScalars[SCALAR_BEAT] = a.beatPulse * inv + b.beatPulse * tFraction
             outScalars[SCALAR_BPM] = if (b.bpmEstimate > 0f) b.bpmEstimate else a.bpmEstimate
         }
 
@@ -174,7 +180,7 @@ class VisualizerBus {
     }
 
     companion object {
-        private const val HISTORY_CAPACITY = 64
+        private const val HISTORY_CAPACITY = 96
         const val SCALAR_BASS = 0
         const val SCALAR_MID = 1
         const val SCALAR_TREBLE = 2

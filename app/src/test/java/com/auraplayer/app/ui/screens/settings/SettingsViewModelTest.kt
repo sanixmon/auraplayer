@@ -10,6 +10,7 @@ import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
+import com.auraplayer.app.data.model.VisualizerTuningPreset
 import com.auraplayer.app.playback.PlaybackController
 import com.auraplayer.app.playback.PlaybackUiState
 import com.auraplayer.app.playback.VisualizerBus
@@ -50,10 +51,14 @@ class SettingsViewModelTest {
         viewModel.setDensity(VisualizerDensity.ULTRA)
         viewModel.setSensitivity(1.8f)
         viewModel.setSmoothing(0.45f)
+        viewModel.setBeatPunch(1.5f)
+        viewModel.setBeatSensitivity(1.4f)
+        viewModel.setBassBoost(1.3f)
+        viewModel.applyTuningPreset(VisualizerTuningPreset.PUNCHY)
         viewModel.setSpreadScale(1.3f)
         viewModel.setStrokeThickness(1.4f)
         viewModel.setRotationSpeed(1.7f)
-        viewModel.setSyncOffsetMs(160)
+        viewModel.setSyncOffsetMs(-35)
         viewModel.setGlowEnabled(false)
         viewModel.setParticlesEnabled(false)
         viewModel.setMirrorEnabled(true)
@@ -63,6 +68,10 @@ class SettingsViewModelTest {
         viewModel.setAccentPreset(AppAccentPreset.CRIMSON_PULSE)
         viewModel.setCustomAppColors(0xFF112233, 0xFF445566)
         viewModel.setCustomVisualizerColors(0xFFAABBCC, 0xFFDDEEFF)
+        viewModel.resetThemeAndCover()
+        viewModel.resetVisualizerStyle()
+        viewModel.resetBeatAndAudio()
+        viewModel.resetMotionAndEffects()
         viewModel.resetDefaults()
 
         coVerify { preferences.updateStyle(VisualizerStyle.FIRE_EMBER) }
@@ -72,10 +81,14 @@ class SettingsViewModelTest {
         coVerify { preferences.updateDensity(VisualizerDensity.ULTRA) }
         coVerify { preferences.updateSensitivity(1.8f) }
         coVerify { preferences.updateSmoothing(0.45f) }
+        coVerify { preferences.updateBeatPunch(1.5f) }
+        coVerify { preferences.updateBeatSensitivity(1.4f) }
+        coVerify { preferences.updateBassBoost(1.3f) }
+        coVerify { preferences.applyTuningPreset(VisualizerTuningPreset.PUNCHY) }
         coVerify { preferences.updateSpreadScale(1.3f) }
         coVerify { preferences.updateStrokeThickness(1.4f) }
         coVerify { preferences.updateRotationSpeed(1.7f) }
-        coVerify { preferences.updateSyncOffsetMs(160) }
+        coVerify { preferences.updateSyncOffsetMs(-35) }
         coVerify { preferences.updateGlowEnabled(false) }
         coVerify { preferences.updateParticlesEnabled(false) }
         coVerify { preferences.updateMirrorEnabled(true) }
@@ -85,6 +98,10 @@ class SettingsViewModelTest {
         coVerify { preferences.updateAccentPreset(AppAccentPreset.CRIMSON_PULSE) }
         coVerify { preferences.updateCustomAppColors(0xFF112233, 0xFF445566) }
         coVerify { preferences.updateCustomVisualizerColors(0xFFAABBCC, 0xFFDDEEFF) }
+        coVerify { preferences.resetThemeAndCover() }
+        coVerify { preferences.resetVisualizerStyle() }
+        coVerify { preferences.resetBeatAndAudio() }
+        coVerify { preferences.resetMotionAndEffects() }
         coVerify { preferences.resetToDefaults() }
     }
 }

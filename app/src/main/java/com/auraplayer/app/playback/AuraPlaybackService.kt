@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.auraplayer.app.AuraApplication
@@ -38,9 +39,15 @@ class AuraPlaybackService : MediaSessionService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): AudioSink {
+                val bufferSizeProvider = DefaultAudioTrackBufferSizeProvider.Builder()
+                    .setMinPcmBufferDurationUs(100_000)
+                    .setMaxPcmBufferDurationUs(160_000)
+                    .setPcmBufferMultiplicationFactor(2)
+                    .build()
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioTrackBufferSizeProvider(bufferSizeProvider)
                     .setAudioProcessors(arrayOf(processor))
                     .build()
             }

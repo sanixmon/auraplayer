@@ -8,6 +8,7 @@ import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.repository.MusicRepository
 import com.auraplayer.app.data.repository.PlaylistRepository
 import com.auraplayer.app.data.scanner.AndroidLocalAudioScanner
+import com.auraplayer.app.data.updater.AppUpdateManager
 import com.auraplayer.app.playback.PlaybackController
 import com.auraplayer.app.playback.VisualizerBus
 
@@ -51,5 +52,9 @@ class AppContainer(context: Context) {
 
     val playbackController: PlaybackController by lazy {
         PlaybackController(appContext)
+    }
+
+    val appUpdateManager: AppUpdateManager by lazy {
+        AppUpdateManager(appContext)
     }
 }

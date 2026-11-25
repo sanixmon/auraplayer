@@ -131,6 +131,10 @@ class AuraBackupManagerTest {
                 emberDirection = EmberDirection.LEFT,
                 colorScheme = VisualizerColorScheme.CUSTOM,
                 density = VisualizerDensity.ULTRA,
+                beatPunch = 1.6f,
+                beatSensitivity = 1.35f,
+                bassBoost = 1.4f,
+                syncOffsetMs = -20,
                 customVizPrimaryArgb = 0xFFFFAA00,
                 customVizSecondaryArgb = 0xFFCC2200
             )
@@ -145,5 +149,9 @@ class AuraBackupManagerTest {
         coVerify { visualizerPrefs.updateCustomVisualizerColors(0xFFFFAA00, 0xFFCC2200) }
         coVerify { visualizerPrefs.updateColorScheme(VisualizerColorScheme.CUSTOM) }
         coVerify { visualizerPrefs.updateDensity(VisualizerDensity.ULTRA) }
+        coVerify { visualizerPrefs.updateBeatPunch(1.6f) }
+        coVerify { visualizerPrefs.updateBeatSensitivity(1.35f) }
+        coVerify { visualizerPrefs.updateBassBoost(1.4f) }
+        coVerify { visualizerPrefs.updateSyncOffsetMs(-20) }
     }
 }

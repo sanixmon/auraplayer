@@ -93,4 +93,52 @@ class AudioSpectrumAnalyzerTest {
         val afterReset = localAnalyzer.analyze(silence, bandCount = 64, sampleRateHz = 44100, timestampMs = ts + 100L)
         assertEquals(0f, afterReset.beatPulse, 0.0001f)
     }
+
+    @Test
+    fun `fast-FFT kick detector triggers cleanly over continuous loud bassline`() {
+        val localAnalyzer = AudioSpectrumAnalyzer(bassFftSize = 4096, detailFftSize = 1024)
+        val sampleRate = 44100
+        val continuousBass = FloatArray(4096) { i ->
+            (0.22 * sin(2.0 * PI * 65.0 * i / sampleRate)).toFloat()
+        }
+        val kickOverBass = FloatArray(4096) { i ->
+            val base = 0.22 * sin(2.0 * PI * 65.0 * i / sampleRate)
+            val kick = if (i >= 3072) 0.70 * sin(2.0 * PI * 85.0 * i / sampleRate) else 0.0
+            (base + kick).toFloat().coerceIn(-1f, 1f)
+        }
+
+        var ts = 2000L
+        var lastSteadyBeat = 1f
+        repeat(20) {
+            val f = localAnalyzer.analyze(continuousBass, bandCount = 64, sampleRateHz = sampleRate, timestampMs = ts)
+            lastSteadyBeat = f.beatPulse
+            ts += 16L
+        }
+        assertTrue("Expected calm beatPulse during steady bassline, got $lastSteadyBeat", lastSteadyBeat < 0.2f)
+
+        val kickFrame = localAnalyzer.analyze(kickOverBass, bandCount = 64, sampleRateHz = sampleRate, timestampMs = ts)
+        assertTrue(
+            "Expected immediate beatPulse on short 23ms kick transient over bassline, got ${kickFrame.beatPulse}",
+            kickFrame.beatPulse > 0.5f
+        )
+    }
+
+    @Test
+    fun `bassBoost lifts low-frequency response relative to treble`() {
+        val sampleRate = 44100
+        val mix = FloatArray(4096) { i ->
+            (0.18 * sin(2.0 * PI * 80.0 * i / sampleRate) +
+                0.55 * sin(2.0 * PI * 6000.0 * i / sampleRate)).toFloat()
+        }
+        val flatAnalyzer = AudioSpectrumAnalyzer(bassFftSize = 4096, detailFftSize = 1024)
+        val boostedAnalyzer = AudioSpectrumAnalyzer(bassFftSize = 4096, detailFftSize = 1024)
+
+        val flat = flatAnalyzer.analyze(mix, bandCount = 64, sampleRateHz = sampleRate, timestampMs = 100L, bassBoost = 1.0f)
+        val boosted = boostedAnalyzer.analyze(mix, bandCount = 64, sampleRateHz = sampleRate, timestampMs = 100L, bassBoost = 1.8f)
+
+        assertTrue(
+            "Expected higher bassEnergy with bassBoost=1.8 (${boosted.bassEnergy}) than flat (${flat.bassEnergy})",
+            boosted.bassEnergy > flat.bassEnergy
+        )
+    }
 }

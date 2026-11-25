@@ -60,7 +60,7 @@ class AudioSpectrumAnalyzer(
     private val rawDbBands = FloatArray(MAX_BANDS)
     private val tiltedDbBands = FloatArray(MAX_BANDS)
     private val normalizedBands = FloatArray(MAX_BANDS)
-    private val prevPreAgcBass = FloatArray(MAX_BANDS)
+    private val prevDetailKickMag = FloatArray(detailFftSize / 2)
     private val waveformScratch = FloatArray(waveformPoints)
     private val waveformMaxScratch = FloatArray(waveformPoints)
     private val waveformMinScratch = FloatArray(waveformPoints)
@@ -79,6 +79,7 @@ class AudioSpectrumAnalyzer(
     private var peakDbTracker = INITIAL_PEAK_DB
     private var lastAnalyzeTimestampMs = -1L
     private var lastBeatTimestampMs = -1L
+    private var lastBeatTriggerFlux = 0f
     private var beatEnvelope = 0f
     private var bpmEstimate = 0f
 
@@ -86,12 +87,13 @@ class AudioSpectrumAnalyzer(
         peakDbTracker = INITIAL_PEAK_DB
         lastAnalyzeTimestampMs = -1L
         lastBeatTimestampMs = -1L
+        lastBeatTriggerFlux = 0f
         beatEnvelope = 0f
         bpmEstimate = 0f
         fluxWriteIdx = 0
         fluxCount = 0
         fluxHistory.fill(0f)
-        prevPreAgcBass.fill(0f)
+        prevDetailKickMag.fill(0f)
     }
 
     fun analyze(
@@ -99,7 +101,9 @@ class AudioSpectrumAnalyzer(
         sampleCount: Int = monoSamples.size,
         bandCount: Int = 64,
         sampleRateHz: Int = 44100,
-        timestampMs: Long = 0L
+        timestampMs: Long = 0L,
+        beatSensitivity: Float = 1.0f,
+        bassBoost: Float = 1.0f
     ): VisualizerFrame {
         if (sampleCount <= 0 || monoSamples.isEmpty()) {
             return VisualizerFrame.EMPTY
@@ -133,8 +137,13 @@ class AudioSpectrumAnalyzer(
         if (rms < NOISE_GATE_RMS) {
             val releaseAlpha = 1f - exp(-dt / PEAK_RELEASE_SEC)
             peakDbTracker += (PEAK_FLOOR_DB - peakDbTracker) * releaseAlpha
-            prevPreAgcBass.fill(0f)
-            updateBeatAndBpm(avgFlux = 0f, timestampMs = timestampMs, dt = dt)
+            prevDetailKickMag.fill(0f)
+            updateBeatAndBpm(
+                avgFlux = 0f,
+                timestampMs = timestampMs,
+                dt = dt,
+                beatSensitivity = beatSensitivity
+            )
             val zeroBands = List(safeBandCount) { 0f }
             val waveList = waveformScratch.toList()
             val waveMaxList = waveformMaxScratch.toList()
@@ -177,9 +186,9 @@ class AudioSpectrumAnalyzer(
 
         val bassBinRes = safeRate.toDouble() / bassFftSize
         val detailBinRes = safeRate.toDouble() / detailFftSize
+        val safeBassBoost = bassBoost.coerceIn(0.5f, 2.0f)
+        val bassShelfDb = (safeBassBoost - 1.0f) * 8.0f
         var frameMaxTiltedDb = -90f
-        var bassFlux = 0f
-        var bassBandCount = 0
 
         for (b in 0 until safeBandCount) {
             val fLow = bandLowHz[b]
@@ -198,25 +207,38 @@ class AudioSpectrumAnalyzer(
             )
             val rawDb = (20.0 * log10(max(amp.toDouble(), 1e-6))).toFloat()
             rawDbBands[b] = rawDb
-            val tilted = rawDb + bandTiltDb[b]
+            val lowShelfWeight = when {
+                fCenter <= 160.0 -> 1f
+                fCenter >= 400.0 -> 0f
+                else -> ((400.0 - fCenter) / 240.0).toFloat()
+            }
+            val tilted = rawDb + bandTiltDb[b] + bassShelfDb * lowShelfWeight
             tiltedDbBands[b] = tilted
             if (rawDb > NOISE_GATE_DB && tilted > frameMaxTiltedDb) {
                 frameMaxTiltedDb = tilted
             }
-
-            // Pre-AGC bass spectral flux (< 220 Hz) decouples beat onset from gain riding.
-            if (fCenter < 220.0) {
-                val preAgcNorm = ((rawDb + DB_SPAN) / DB_SPAN).coerceIn(0f, 1f)
-                val diff = preAgcNorm - prevPreAgcBass[b]
-                if (diff > 0f) {
-                    bassFlux += diff
-                }
-                prevPreAgcBass[b] = preAgcNorm
-                bassBandCount++
-            }
         }
 
-        // Track signal ceiling in dB domain: fast attack (~45ms), slow release (~2.5s).
+        // Fast-FFT (~23 ms) pre-AGC kick/low-mid spectral flux in compressed linear amplitude domain.
+        // Avoids the 93 ms temporal smearing of the 4096-pt bass FFT and preserves kick contrast
+        // even on loudly mastered tracks with continuous basslines.
+        val kStart = max(1, floor(30.0 / detailBinRes).toInt()).coerceAtMost(detailMag.lastIndex)
+        val kBassEnd = ceil(220.0 / detailBinRes).toInt().coerceIn(kStart, detailMag.lastIndex)
+        val kPunchEnd = ceil(420.0 / detailBinRes).toInt().coerceIn(kBassEnd, detailMag.lastIndex)
+        var kickFlux = 0f
+        var kickWeightSum = 0f
+        for (k in kStart..kPunchEnd) {
+            val weight = if (k <= kBassEnd) 1.0f else 0.35f
+            val mag = sqrt(detailMag[k].coerceAtLeast(0f))
+            val diff = mag - prevDetailKickMag[k]
+            if (diff > 0f) {
+                kickFlux += diff * weight
+            }
+            prevDetailKickMag[k] = mag
+            kickWeightSum += weight
+        }
+
+        // Track signal ceiling in dB domain: fast attack (~45ms), slow release (~2.0s).
         if (frameMaxTiltedDb > NOISE_GATE_DB) {
             val trackerTau = if (frameMaxTiltedDb > peakDbTracker) PEAK_ATTACK_SEC else PEAK_RELEASE_SEC
             val trackerAlpha = 1f - exp(-dt / trackerTau)
@@ -233,13 +255,19 @@ class AudioSpectrumAnalyzer(
                 0f
             } else {
                 val scaledDb = (tiltedDbBands[b] + normShiftDb).coerceIn(-DB_SPAN, 0f)
-                ((scaledDb + DB_SPAN) / DB_SPAN).coerceIn(0f, 1f)
+                val linearNorm = ((scaledDb + DB_SPAN) / DB_SPAN).coerceIn(0f, 1f)
+                linearNorm.pow(BAND_CONTRAST_GAMMA)
             }
         }
 
-        // Update adaptive threshold for bass spectral flux beat detection.
-        val avgBassFlux = bassFlux / max(1, bassBandCount)
-        updateBeatAndBpm(avgBassFlux, timestampMs, dt)
+        // Update adaptive threshold for fast kick spectral flux beat detection.
+        val avgBassFlux = kickFlux / max(1f, kickWeightSum)
+        updateBeatAndBpm(
+            avgFlux = avgBassFlux,
+            timestampMs = timestampMs,
+            dt = dt,
+            beatSensitivity = beatSensitivity
+        )
 
         // Aggregate perceptual region energies across mapped bands (log boundaries ~250 Hz / ~2.5 kHz).
         var bassSum = 0f
@@ -397,36 +425,46 @@ class AudioSpectrumAnalyzer(
         }
     }
 
-    private fun updateBeatAndBpm(avgFlux: Float, timestampMs: Long, dt: Float) {
-        fluxHistory[fluxWriteIdx] = avgFlux
-        fluxWriteIdx = (fluxWriteIdx + 1) % FLUX_WINDOW_SIZE
-        if (fluxCount < FLUX_WINDOW_SIZE) {
-            fluxCount++
+    private fun updateBeatAndBpm(
+        avgFlux: Float,
+        timestampMs: Long,
+        dt: Float,
+        beatSensitivity: Float
+    ) {
+        // Compute adaptive baseline from PRIOR history before inserting the current frame,
+        // so a strong kick transient never raises its own threshold.
+        val priorCount = fluxCount
+        var mean = 0f
+        var std = 0f
+        if (priorCount > 0) {
+            var sum = 0f
+            for (i in 0 until priorCount) {
+                sum += fluxHistory[i]
+            }
+            mean = sum / priorCount
+
+            var sqDiffSum = 0f
+            for (i in 0 until priorCount) {
+                val d = fluxHistory[i] - mean
+                sqDiffSum += d * d
+            }
+            std = sqrt(sqDiffSum / priorCount)
         }
 
-        var sum = 0f
-        for (i in 0 until fluxCount) {
-            sum += fluxHistory[i]
-        }
-        val mean = sum / max(1, fluxCount)
-
-        var sqDiffSum = 0f
-        for (i in 0 until fluxCount) {
-            val d = fluxHistory[i] - mean
-            sqDiffSum += d * d
-        }
-        val std = sqrt(sqDiffSum / max(1, fluxCount))
-        val adaptiveThreshold = max(0.025f, mean + 1.55f * std)
+        val safeSens = beatSensitivity.coerceIn(0.5f, 2.0f)
+        val minThresh = (MIN_FLUX_THRESHOLD / safeSens).coerceIn(0.010f, 0.055f)
+        val stdMult = (FLUX_STD_MULTIPLIER / safeSens).coerceIn(0.65f, 2.4f)
+        val adaptiveThreshold = max(minThresh, mean + stdMult * std)
 
         val effectiveTs = if (timestampMs > 0L) timestampMs else {
             (if (lastBeatTimestampMs < 0L) 200L else lastBeatTimestampMs + 16L)
         }
-        val cooldownPassed = lastBeatTimestampMs < 0L || (effectiveTs - lastBeatTimestampMs) >= MIN_BEAT_INTERVAL_MS
+        val sinceLastBeatMs = if (lastBeatTimestampMs < 0L) Long.MAX_VALUE else effectiveTs - lastBeatTimestampMs
+        val cooldownPassed = lastBeatTimestampMs < 0L || sinceLastBeatMs >= MIN_BEAT_INTERVAL_MS
 
-        if (fluxCount >= 4 && avgFlux > adaptiveThreshold && cooldownPassed) {
-            val ibiMs = effectiveTs - lastBeatTimestampMs
-            if (lastBeatTimestampMs > 0L && ibiMs in 300L..1600L) {
-                val instantBpm = 60_000f / ibiMs.toFloat()
+        if (priorCount >= 4 && avgFlux > adaptiveThreshold && cooldownPassed) {
+            if (lastBeatTimestampMs > 0L && sinceLastBeatMs in 300L..1600L) {
+                val instantBpm = 60_000f / sinceLastBeatMs.toFloat()
                 bpmEstimate = if (bpmEstimate <= 0f) {
                     instantBpm
                 } else {
@@ -434,10 +472,21 @@ class AudioSpectrumAnalyzer(
                 }
             }
             lastBeatTimestampMs = effectiveTs
-            val excess = (avgFlux - adaptiveThreshold) / max(adaptiveThreshold, 0.04f)
-            beatEnvelope = max(beatEnvelope, (0.45f + excess * 0.55f).coerceIn(0.45f, 1f))
+            lastBeatTriggerFlux = avgFlux
+            val excess = (avgFlux - adaptiveThreshold) / max(adaptiveThreshold, 0.035f)
+            beatEnvelope = max(beatEnvelope, (0.52f + excess * 0.48f).coerceIn(0.52f, 1f))
+        } else if (sinceLastBeatMs in 1L..35L && avgFlux > lastBeatTriggerFlux) {
+            lastBeatTriggerFlux = avgFlux
+            val excess = (avgFlux - adaptiveThreshold) / max(adaptiveThreshold, 0.035f)
+            beatEnvelope = max(beatEnvelope, (0.52f + excess * 0.48f).coerceIn(0.52f, 1f))
         } else {
             beatEnvelope *= exp(-dt / BEAT_DECAY_SEC)
+        }
+
+        fluxHistory[fluxWriteIdx] = avgFlux
+        fluxWriteIdx = (fluxWriteIdx + 1) % FLUX_WINDOW_SIZE
+        if (fluxCount < FLUX_WINDOW_SIZE) {
+            fluxCount++
         }
     }
 
@@ -519,16 +568,19 @@ class AudioSpectrumAnalyzer(
     private companion object {
         private const val MAX_BANDS = 96
         private const val BASS_CROSSOVER_HZ = 500.0
-        private const val DB_SPAN = 70f
+        private const val DB_SPAN = 50f
+        private const val BAND_CONTRAST_GAMMA = 1.35f
         private const val NOISE_GATE_DB = -60f
         private const val NOISE_GATE_RMS = 0.001f
         private const val INITIAL_PEAK_DB = -12f
-        private const val PEAK_FLOOR_DB = -36f
-        private const val MAX_GAIN_DB = 36f
+        private const val PEAK_FLOOR_DB = -34f
+        private const val MAX_GAIN_DB = 34f
         private const val PEAK_ATTACK_SEC = 0.045f
-        private const val PEAK_RELEASE_SEC = 2.5f
-        private const val FLUX_WINDOW_SIZE = 64
+        private const val PEAK_RELEASE_SEC = 2.0f
+        private const val FLUX_WINDOW_SIZE = 48
+        private const val MIN_FLUX_THRESHOLD = 0.022f
+        private const val FLUX_STD_MULTIPLIER = 1.35f
         private const val MIN_BEAT_INTERVAL_MS = 180L
-        private const val BEAT_DECAY_SEC = 0.065f
+        private const val BEAT_DECAY_SEC = 0.095f
     }
 }

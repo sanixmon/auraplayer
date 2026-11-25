@@ -51,6 +51,7 @@ fun CoverArtView(
     modifier: Modifier = Modifier,
     beatPulse: Float = 0f,
     sensitivity: Float = 1.3f,
+    beatPunch: Float = 1.0f,
     syncOffsetMs: Int = 0,
     demoWhenIdle: Boolean = false,
     visualizerBus: VisualizerBus? = null
@@ -61,6 +62,7 @@ fun CoverArtView(
     val latestBass by rememberUpdatedState(bassEnergy)
     val latestBeat by rememberUpdatedState(beatPulse)
     val latestSensitivity by rememberUpdatedState(sensitivity)
+    val latestBeatPunch by rememberUpdatedState(beatPunch)
     val latestSyncDelay by rememberUpdatedState(syncOffsetMs)
 
     val emptyScratch = remember { FloatArray(0) }
@@ -69,6 +71,7 @@ fun CoverArtView(
     LaunchedEffect(isPlaying, demoWhenIdle, style, visualizerBus) {
         var lastNanos = 0L
         var animSec = 0f
+        var rollingBass = 0f
         var settleFrames = if (isPlaying || demoWhenIdle) Int.MAX_VALUE else 45
         while (settleFrames > 0) {
             withFrameNanos { nowNanos ->
@@ -83,6 +86,7 @@ fun CoverArtView(
                     vinylAngle = (vinylAngle + dt * (28f + smoothedPunch * 26f)) % 360f
                 }
 
+                val punchScale = latestBeatPunch.coerceIn(0f, 2.0f)
                 val targetPunch = when {
                     isPlaying -> {
                         val hasBus = visualizerBus?.sampleInterpolatedInto(
@@ -92,19 +96,25 @@ fun CoverArtView(
                             outScalars = scalarScratch
                         ) == true
                         val sens = latestSensitivity.coerceIn(0.5f, 2.5f)
-                        val liveBass = (if (hasBus) scalarScratch[VisualizerBus.SCALAR_BASS] else latestBass) * sens
-                        val liveBeat = (if (hasBus) scalarScratch[VisualizerBus.SCALAR_BEAT] else latestBeat) * sens
-                        max(
-                            liveBeat.coerceIn(0f, 1f) * 0.92f,
-                            liveBass.coerceIn(0f, 1f).pow(1.65f) * 0.72f
-                        ).coerceIn(0f, 1f)
+                        val liveBass = ((if (hasBus) scalarScratch[VisualizerBus.SCALAR_BASS] else latestBass) * sens)
+                            .coerceIn(0f, 1f)
+                        val liveBeat = ((if (hasBus) scalarScratch[VisualizerBus.SCALAR_BEAT] else latestBeat) * sens)
+                            .coerceIn(0f, 1f)
+                        val baselineAlpha = 1f - exp(-dt / 0.42f)
+                        rollingBass += (liveBass - rollingBass) * baselineAlpha
+                        val bassTransient = ((liveBass - rollingBass) * 2.5f).coerceIn(0f, 1f)
+                        (max(
+                            liveBeat,
+                            max(bassTransient * 0.85f, liveBass.pow(2.4f) * 0.40f)
+                        ) * punchScale).coerceIn(0f, 1.35f)
                     }
                     demoWhenIdle -> {
                         animSec += dt
                         val pulseWave = ((sin(animSec * 3.1f) + 1f) * 0.5f).pow(2.4f)
-                        (pulseWave * 0.8f).coerceIn(0f, 1f)
+                        (pulseWave * 0.8f * punchScale).coerceIn(0f, 1.35f)
                     }
                     else -> {
+                        rollingBass = 0f
                         settleFrames--
                         0f
                     }
@@ -117,7 +127,7 @@ fun CoverArtView(
     }
 
     val pulseScale = if (isPlaying || demoWhenIdle || smoothedPunch > 0.005f) {
-        1f + (smoothedPunch * 0.145f).coerceIn(0f, 0.16f)
+        1f + (smoothedPunch * 0.145f).coerceIn(0f, 0.22f)
     } else {
         1f
     }

@@ -113,6 +113,7 @@ import com.auraplayer.app.data.model.NowPlayingVisualMode
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
+import com.auraplayer.app.data.model.VisualizerTuningPreset
 import com.auraplayer.app.playback.RepeatMode
 import com.auraplayer.app.ui.components.CoverArtView
 import com.auraplayer.app.ui.components.DualColorWheelDialog
@@ -475,6 +476,7 @@ fun NowPlayingScreen(
                             bassEnergy = visualizerFrame.bassEnergy,
                             beatPulse = visualizerFrame.beatPulse,
                             sensitivity = visualizerConfig.sensitivity,
+                            beatPunch = visualizerConfig.beatPunch,
                             syncOffsetMs = visualizerConfig.syncOffsetMs,
                             visualizerBus = viewModel.visualizerBus,
                             size = animatedCoverSize
@@ -860,6 +862,21 @@ fun NowPlayingScreen(
                                     }
                                 )
                             }
+                        )
+                    }
+                }
+
+                Text("Beat Preset", style = MaterialTheme.typography.titleMedium)
+                val activeTuningPreset = visualizerConfig.matchingTuningPreset()
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    VisualizerTuningPreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = activeTuningPreset == preset,
+                            onClick = { viewModel.applyTuningPreset(preset) },
+                            label = { Text(preset.displayName) }
                         )
                     }
                 }

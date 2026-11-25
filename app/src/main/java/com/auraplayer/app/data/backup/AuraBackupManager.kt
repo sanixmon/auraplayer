@@ -145,6 +145,18 @@ class AuraBackupManager(
             visualizerPreferences.updateDensity(domain.density)
             visualizerPreferences.updateSensitivity(domain.sensitivity)
             visualizerPreferences.updateSmoothing(domain.smoothing)
+            if (savedConfig.beatPunch != null) {
+                visualizerPreferences.updateBeatPunch(domain.beatPunch)
+            }
+            if (savedConfig.beatSensitivity != null) {
+                visualizerPreferences.updateBeatSensitivity(domain.beatSensitivity)
+            }
+            if (savedConfig.bassBoost != null) {
+                visualizerPreferences.updateBassBoost(domain.bassBoost)
+            }
+            if (savedConfig.syncOffsetMs != null) {
+                visualizerPreferences.updateSyncOffsetMs(domain.syncOffsetMs)
+            }
             visualizerPreferences.updateGlowEnabled(domain.glowEnabled)
             visualizerPreferences.updateMirrorEnabled(domain.mirrorEnabled)
             visualizerPreferences.updatePeakCapsEnabled(domain.peakCapsEnabled)

@@ -41,6 +41,48 @@ enum class VisualizerDensity(val displayName: String, val bandCount: Int) {
     ULTRA("96", 96)
 }
 
+enum class VisualizerTuningPreset(
+    val displayName: String,
+    val sensitivity: Float,
+    val smoothing: Float,
+    val beatPunch: Float,
+    val beatSensitivity: Float,
+    val bassBoost: Float
+) {
+    BALANCED(
+        displayName = "Balanced",
+        sensitivity = 1.3f,
+        smoothing = 0.65f,
+        beatPunch = 1.0f,
+        beatSensitivity = 1.0f,
+        bassBoost = 1.0f
+    ),
+    PUNCHY(
+        displayName = "Punchy",
+        sensitivity = 1.55f,
+        smoothing = 0.45f,
+        beatPunch = 1.55f,
+        beatSensitivity = 1.25f,
+        bassBoost = 1.35f
+    ),
+    CHILL(
+        displayName = "Chill",
+        sensitivity = 1.05f,
+        smoothing = 0.82f,
+        beatPunch = 0.60f,
+        beatSensitivity = 0.85f,
+        bassBoost = 0.90f
+    ),
+    HYPER(
+        displayName = "Hyper",
+        sensitivity = 1.90f,
+        smoothing = 0.28f,
+        beatPunch = 1.85f,
+        beatSensitivity = 1.60f,
+        bassBoost = 1.55f
+    )
+}
+
 enum class NowPlayingVisualMode(val displayName: String) {
     COVER_ONLY("Cover"),
     COVER_AND_VISUALIZER("Art + Visualizer"),
@@ -81,6 +123,9 @@ data class VisualizerConfig(
     val density: VisualizerDensity = VisualizerDensity.HIGH,
     val sensitivity: Float = 1.3f,
     val smoothing: Float = 0.65f,
+    val beatPunch: Float = 1.0f,
+    val beatSensitivity: Float = 1.0f,
+    val bassBoost: Float = 1.0f,
     val spreadScale: Float = 1.0f,
     val strokeThickness: Float = 1.0f,
     val rotationSpeed: Float = 1.0f,
@@ -97,4 +142,12 @@ data class VisualizerConfig(
     val customAppSecondaryArgb: Long = AppAccentPreset.AURORA_CYAN.secondaryHex,
     val customVizPrimaryArgb: Long = 0xFF00E5FF,
     val customVizSecondaryArgb: Long = 0xFFA855F7
-)
+) {
+    fun matchingTuningPreset(): VisualizerTuningPreset? = VisualizerTuningPreset.entries.firstOrNull { preset ->
+        kotlin.math.abs(sensitivity - preset.sensitivity) < 0.03f &&
+            kotlin.math.abs(smoothing - preset.smoothing) < 0.03f &&
+            kotlin.math.abs(beatPunch - preset.beatPunch) < 0.03f &&
+            kotlin.math.abs(beatSensitivity - preset.beatSensitivity) < 0.03f &&
+            kotlin.math.abs(bassBoost - preset.bassBoost) < 0.03f
+    }
+}

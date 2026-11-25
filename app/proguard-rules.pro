@@ -5,6 +5,7 @@
 }
 -keep,includedescriptorclasses class com.auraplayer.app.ui.navigation.** { *; }
 -keep,includedescriptorclasses class com.auraplayer.app.data.backup.** { *; }
+-keep,includedescriptorclasses class com.auraplayer.app.data.updater.** { *; }
 -keep class com.auraplayer.app.data.local.db.** { *; }
 
 # Keep reflectively loaded Media3 FFmpeg extension & JNI methods

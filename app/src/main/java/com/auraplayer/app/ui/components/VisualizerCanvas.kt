@@ -240,8 +240,10 @@ fun VisualizerCanvas(
     var animTimeSec by remember { mutableFloatStateOf(0f) }
     var lastDeltaSec by remember { mutableFloatStateOf(0.016f) }
     var lastShockwaveTimeSec by remember { mutableFloatStateOf(-1f) }
+    var lastEmberBurstTimeSec by remember { mutableFloatStateOf(-1f) }
     var frameTick by remember { mutableLongStateOf(0L) }
     var smoothedBass by remember { mutableFloatStateOf(0f) }
+    var rollingBassBaseline by remember { mutableFloatStateOf(0f) }
     var smoothedPunch by remember { mutableFloatStateOf(0f) }
     var emberActiveAlpha by remember { mutableFloatStateOf(0f) }
 
@@ -304,6 +306,9 @@ fun VisualizerCanvas(
         }
         val bassAlpha = 1f - exp(-dt / if (targetBass > smoothedBass) 0.018f else 0.14f)
         smoothedBass += (targetBass - smoothedBass) * bassAlpha
+        val baselineAlpha = 1f - exp(-dt / 0.42f)
+        rollingBassBaseline += (targetBass - rollingBassBaseline) * baselineAlpha
+        val bassTransient = ((targetBass - rollingBassBaseline) * 2.5f).coerceIn(0f, 1f)
 
         val currentBeatPulse = when {
             useDemo -> (((sin(animTimeSec * 3.1f) + 1f) * 0.5f).pow(2.4f) * 0.8f).coerceIn(0f, 1f)
@@ -312,12 +317,14 @@ fun VisualizerCanvas(
             else -> 0f
         }
 
-        // Combined punch envelope matched cleanly to CoverArtView bounce (attack 10 ms, release 115 ms).
+        // Combined transient-driven punch envelope matched cleanly to CoverArtView bounce
+        // (attack 10 ms, release 115 ms), scaled by user's Beat Punch tuning.
+        val punchScale = config.beatPunch.coerceIn(0f, 2.0f)
         val targetPunch = if (isPlaying || useDemo) {
-            max(
-                currentBeatPulse * 0.92f,
-                targetBass.pow(1.65f) * 0.72f
-            ).coerceIn(0f, 1f)
+            (max(
+                currentBeatPulse,
+                max(bassTransient * 0.85f, targetBass.pow(2.4f) * 0.40f)
+            ) * punchScale).coerceIn(0f, 1.35f)
         } else {
             0f
         }
@@ -552,12 +559,20 @@ fun VisualizerCanvas(
                         )
                     }
                 }
+                val triggerEmberBeatBurst = (isPlaying || useDemo) &&
+                    config.beatPunch > 0.05f &&
+                    (currentBeatPulse > 0.36f || targetPunch > 0.62f) &&
+                    animTimeSec - lastEmberBurstTimeSec > 0.16f
+                if (triggerEmberBeatBurst) {
+                    lastEmberBurstTimeSec = animTimeSec
+                }
                 drawFireEmber(
                     embers = emberParticles,
                     bands = smoothedBands,
                     rng = emberRng,
                     bassEnergy = smoothedBass,
                     punch = smoothedPunch,
+                    triggerBeatBurst = triggerEmberBeatBurst,
                     activeAlpha = emberActiveAlpha,
                     palette = palette,
                     config = config,
@@ -603,9 +618,9 @@ private fun DrawScope.drawRingVisualizer(
     val minDim = min(size.width, size.height)
     val maxDim = max(size.width, size.height)
     val pxDensity = density
-    // Match CoverArtView +14.5% kick bounce so the ring & disc breathe together as one unit.
+    // Match CoverArtView kick bounce so the ring & disc breathe together as one unit.
     val baseRadius = if (explicitCenterRadiusPx != null) {
-        explicitCenterRadiusPx * (1f + punch * 0.145f) + 2f * pxDensity
+        explicitCenterRadiusPx * (1f + (punch * 0.145f).coerceIn(0f, 0.22f)) + 2f * pxDensity
     } else {
         minDim * centerRingRatio.coerceIn(0.16f, 0.36f) + punch * (minDim * 0.045f) + bassEnergy * (minDim * 0.02f)
     }
@@ -1609,6 +1624,7 @@ private fun DrawScope.drawFireEmber(
     rng: IntArray,
     bassEnergy: Float,
     punch: Float,
+    triggerBeatBurst: Boolean,
     activeAlpha: Float,
     palette: VisualizerPalette,
     config: VisualizerConfig,
@@ -1635,9 +1651,9 @@ private fun DrawScope.drawFireEmber(
     }.coerceAtMost(embers.size)
 
     val radialStartRadius = if (explicitCenterRadiusPx != null) {
-        explicitCenterRadiusPx * (1f + punch * 0.145f) + 2f * pxDensity
+        explicitCenterRadiusPx * (1f + (punch * 0.145f).coerceIn(0f, 0.22f)) + 2f * pxDensity
     } else {
-        minDim * centerRingRatio.coerceIn(0.14f, 0.28f) * 0.52f + punch * (minDim * 0.03f)
+        minDim * centerRingRatio.coerceIn(0.14f, 0.28f) * 0.52f + punch * (minDim * 0.04f)
     }
     val radialMaxRadius = hypot(
         max(center.x, size.width - center.x),
@@ -1646,7 +1662,7 @@ private fun DrawScope.drawFireEmber(
 
     // 1. Soft ambient heat glow at emitter edge (or around cover art for Radial)
     if (config.glowEnabled) {
-        val heatAlpha = ((0.18f + bassEnergy * 0.16f + punch * 0.22f) * activeAlpha).coerceIn(0f, 0.48f)
+        val heatAlpha = ((0.12f + bassEnergy * 0.14f + punch * 0.34f) * activeAlpha).coerceIn(0f, 0.58f)
         drawAmbientHeatEdge(
             direction = direction,
             palette = palette,
@@ -1669,22 +1685,38 @@ private fun DrawScope.drawFireEmber(
         }
         if (direction == EmberDirection.RADIAL && explicitCenterRadiusPx != null) {
             drawCircle(
-                color = palette.glow.copy(alpha = ((0.22f + punch * 0.24f) * activeAlpha).coerceIn(0f, 0.55f)),
+                color = palette.glow.copy(alpha = ((0.18f + punch * 0.36f) * activeAlpha).coerceIn(0f, 0.65f)),
                 radius = radialStartRadius,
                 center = center,
-                style = Stroke(width = (3.6f + punch * 2.2f) * pxDensity * thickness)
+                style = Stroke(width = (3.2f + punch * 3.0f) * pxDensity * thickness)
             )
         }
     }
 
-    // 2. Advance physics & render glowing ember particles
-    val speedMult = (0.35f + spinSpeed * 0.65f) * (0.70f + bassEnergy * 0.65f + punch * 1.25f)
-    val isBeatBurst = isActive && punch > 0.46f
+    // 2. Beat-onset spark eruption: immediately launch a wave of fresh hot embers on every kick
+    if (triggerBeatBurst) {
+        var burstRemaining = (activeCount / 7).coerceIn(8, 22)
+        for (i in 0 until activeCount) {
+            if (burstRemaining <= 0) break
+            val p = embers[i]
+            if (p.life > 0.58f) {
+                respawnEmber(p, direction, config.mirrorEnabled, bands, rng, prewarm = false)
+                p.speedScale *= 1.35f
+                p.vx *= 1.35f
+                p.vy *= 1.35f
+                p.baseSizeDp = (p.baseSizeDp * 1.18f).coerceAtMost(5.2f)
+                burstRemaining--
+            }
+        }
+    }
+
+    // 3. Advance physics & render glowing ember particles with crisp beat surge
+    val speedMult = (0.35f + spinSpeed * 0.65f) * (0.42f + bassEnergy * 0.45f + punch * 2.25f)
 
     for (i in 0 until activeCount) {
         val p = embers[i]
         val sway = sin(timeSec * p.turbulenceFreq + p.turbulencePhase) *
-            p.turbulenceAmp * spread * (0.85f + bassEnergy * 0.45f)
+            p.turbulenceAmp * spread * (0.80f + bassEnergy * 0.45f + punch * 0.55f)
 
         var posX: Float
         var posY: Float
@@ -1694,10 +1726,10 @@ private fun DrawScope.drawFireEmber(
         if (direction == EmberDirection.RADIAL) {
             if (isActive || activeAlpha > 0.01f) {
                 val swirlDir = if (p.mirrorSide) -1f else 1f
-                p.radialProgress += p.lifeSpeed * dt * speedMult * 0.78f
+                p.radialProgress += p.lifeSpeed * dt * speedMult * 0.80f
                 p.radialAngle += sway * dt * 1.6f * swirlDir
                 p.life = p.radialProgress
-                if (p.life >= 1f || (isBeatBurst && p.life > 0.80f && (i and 3) == 0)) {
+                if (p.life >= 1f) {
                     respawnEmber(p, direction, config.mirrorEnabled, bands, rng, prewarm = false)
                 }
             }
@@ -1717,9 +1749,9 @@ private fun DrawScope.drawFireEmber(
             if (isActive || activeAlpha > 0.01f) {
                 p.x += stepVx * dt
                 p.y += stepVy * dt
-                p.life += p.lifeSpeed * dt * (0.70f + speedMult * 0.42f)
+                p.life += p.lifeSpeed * dt * (0.62f + speedMult * 0.36f)
                 val outOfBounds = p.x < -0.10f || p.x > 1.10f || p.y < -0.10f || p.y > 1.10f
-                if (p.life >= 1f || outOfBounds || (isBeatBurst && p.life > 0.80f && (i and 3) == 0)) {
+                if (p.life >= 1f || outOfBounds) {
                     respawnEmber(p, direction, config.mirrorEnabled, bands, rng, prewarm = false)
                 }
             }
@@ -1733,10 +1765,11 @@ private fun DrawScope.drawFireEmber(
         }
 
         val life = p.life.coerceIn(0f, 1f)
-        val birthFade = (life / 0.10f).coerceIn(0f, 1f)
+        val birthFade = (life / 0.08f).coerceIn(0f, 1f)
         val deathFade = (1f - life).pow(1.25f)
         val flicker = 0.72f + 0.28f * sin(timeSec * p.flickerSpeed + p.flickerPhase)
-        val alpha = (birthFade * deathFade * flicker * activeAlpha).coerceIn(0f, 0.98f)
+        val beatBrightness = (0.76f + punch * 0.34f).coerceIn(0.70f, 1.12f)
+        val alpha = (birthFade * deathFade * flicker * beatBrightness * activeAlpha).coerceIn(0f, 0.98f)
         if (alpha <= 0.01f) continue
 
         // Heat-to-cool color progression across the ember's lifetime
@@ -1748,13 +1781,13 @@ private fun DrawScope.drawFireEmber(
 
         val radius = (p.baseSizeDp * pxDensity * thickness *
             (0.55f + (1f - life) * 0.65f) *
-            (0.84f + punch * 0.44f)).coerceAtLeast(1.1f * pxDensity)
+            (0.78f + punch * 0.65f)).coerceAtLeast(1.1f * pxDensity)
         val pos = Offset(posX, posY)
-        val hotCoreAlpha = (alpha * (1f - life * 0.62f) * 0.88f).coerceIn(0f, 0.92f)
+        val hotCoreAlpha = (alpha * (1f - life * 0.58f) * (0.78f + punch * 0.22f)).coerceIn(0f, 0.96f)
 
         when (config.fillMode) {
             VisualizerFillMode.LINE -> {
-                val tailLen = (5.5f + p.speedScale * 8.5f + punch * 7.5f) *
+                val tailLen = (5.0f + p.speedScale * 8.0f + punch * 14.0f) *
                     pxDensity * thickness * (0.6f + (1f - life) * 0.6f)
                 val tailPos = Offset(posX - dirX * tailLen, posY - dirY * tailLen)
 

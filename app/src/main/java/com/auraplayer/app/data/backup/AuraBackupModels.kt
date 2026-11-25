@@ -45,7 +45,11 @@ data class BackupVisualizerConfig(
     val peakCapsEnabled: Boolean,
     val emberDirection: String? = null,
     val customVizPrimaryArgb: Long? = null,
-    val customVizSecondaryArgb: Long? = null
+    val customVizSecondaryArgb: Long? = null,
+    val beatPunch: Float? = null,
+    val beatSensitivity: Float? = null,
+    val bassBoost: Float? = null,
+    val syncOffsetMs: Int? = null
 ) {
     fun toDomain(): VisualizerConfig {
         val defaults = VisualizerConfig()
@@ -60,6 +64,10 @@ data class BackupVisualizerConfig(
                 ?: VisualizerDensity.MEDIUM,
             sensitivity = sensitivity.coerceIn(0.5f, 2.5f),
             smoothing = smoothing.coerceIn(0.15f, 0.95f),
+            beatPunch = (beatPunch ?: defaults.beatPunch).coerceIn(0f, 2.0f),
+            beatSensitivity = (beatSensitivity ?: defaults.beatSensitivity).coerceIn(0.5f, 2.0f),
+            bassBoost = (bassBoost ?: defaults.bassBoost).coerceIn(0.5f, 2.0f),
+            syncOffsetMs = (syncOffsetMs ?: defaults.syncOffsetMs).coerceIn(-100, 350),
             glowEnabled = glowEnabled,
             mirrorEnabled = mirrorEnabled,
             peakCapsEnabled = peakCapsEnabled,
@@ -80,7 +88,11 @@ data class BackupVisualizerConfig(
             peakCapsEnabled = config.peakCapsEnabled,
             emberDirection = config.emberDirection.name,
             customVizPrimaryArgb = config.customVizPrimaryArgb,
-            customVizSecondaryArgb = config.customVizSecondaryArgb
+            customVizSecondaryArgb = config.customVizSecondaryArgb,
+            beatPunch = config.beatPunch,
+            beatSensitivity = config.beatSensitivity,
+            bassBoost = config.bassBoost,
+            syncOffsetMs = config.syncOffsetMs
         )
     }
 }

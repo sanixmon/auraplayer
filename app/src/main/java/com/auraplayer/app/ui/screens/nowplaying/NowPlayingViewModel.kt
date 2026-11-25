@@ -12,6 +12,7 @@ import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerFrame
 import com.auraplayer.app.data.model.VisualizerStyle
+import com.auraplayer.app.data.model.VisualizerTuningPreset
 import com.auraplayer.app.playback.PlaybackController
 import com.auraplayer.app.playback.PlaybackUiState
 import com.auraplayer.app.playback.VisualizerBus
@@ -81,6 +82,10 @@ class NowPlayingViewModel(
         viewModelScope.launch {
             visualizerPreferences.updateCustomVisualizerColors(primaryArgb, secondaryArgb)
         }
+    }
+
+    fun applyTuningPreset(preset: VisualizerTuningPreset) {
+        viewModelScope.launch { visualizerPreferences.applyTuningPreset(preset) }
     }
 
     fun selectCoverArtStyle(style: CoverArtStyle) {

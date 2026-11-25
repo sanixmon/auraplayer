@@ -99,6 +99,8 @@ fun AuraAppRoot(
     val visualizerConfig by appContainer.visualizerPreferences.configFlow
         .collectAsStateWithLifecycle(initialValue = VisualizerConfig())
     appContainer.visualizerBus.targetBandCount = visualizerConfig.density.bandCount
+    appContainer.visualizerBus.beatSensitivity = visualizerConfig.beatSensitivity
+    appContainer.visualizerBus.bassBoost = visualizerConfig.bassBoost
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val useNavRail = widthSizeClass != WindowWidthSizeClass.Compact
@@ -260,7 +262,8 @@ fun AuraAppRoot(
                                 factory = SettingsViewModel.Factory(
                                     preferences = appContainer.visualizerPreferences,
                                     visualizerBus = appContainer.visualizerBus,
-                                    playbackController = appContainer.playbackController
+                                    playbackController = appContainer.playbackController,
+                                    appUpdateManager = appContainer.appUpdateManager
                                 )
                             )
                             SettingsScreen(viewModel = vm)
