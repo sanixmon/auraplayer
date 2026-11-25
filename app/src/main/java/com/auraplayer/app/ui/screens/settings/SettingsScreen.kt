@@ -98,8 +98,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.auraplayer.app.BuildConfig
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.AveeScenePreset
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
@@ -111,9 +114,12 @@ import com.auraplayer.app.data.model.VisualizerTuningPreset
 import com.auraplayer.app.data.updater.AppUpdateInfo
 import com.auraplayer.app.data.updater.ChangelogRelease
 import com.auraplayer.app.playback.VisualizerBus
+import com.auraplayer.app.ui.components.AveeBackgroundLayer
+import com.auraplayer.app.ui.components.AveeStagePostFxBox
 import com.auraplayer.app.ui.components.CoverArtView
 import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.VisualizerCanvas
+import com.auraplayer.app.ui.components.rememberBeatPunchState
 import com.auraplayer.app.ui.components.toPalette
 import com.auraplayer.app.ui.theme.AccentColors
 import com.auraplayer.app.ui.theme.LocalAlbumAccentColors
@@ -268,13 +274,17 @@ fun SettingsScreen(
                                 onOpenAppColorPicker = {
                                     activeColorPicker = ColorPickerTarget.APP_COLOR
                                 },
-                                onSelectCoverArtStyle = viewModel::setCoverArtStyle
+                                onSelectCoverArtStyle = viewModel::setCoverArtStyle,
+                                onSelectBackgroundMode = viewModel::setBackgroundMode,
+                                onToggleVignette = { viewModel.setVignetteEnabled(!config.vignetteEnabled) }
                             )
 
                             SettingsCategory.VISUALIZER_STYLE -> VisualizerStyleSection(
                                 config = config,
                                 dynamicAccent = dynamicAccent,
+                                onApplyScenePreset = viewModel::applyScenePreset,
                                 onSelectStyle = viewModel::setStyle,
+                                onSelectParticleOverlay = viewModel::setParticleOverlay,
                                 onSelectEmberDirection = viewModel::setEmberDirection,
                                 onSelectFillMode = viewModel::setFillMode,
                                 onSelectColorScheme = { scheme ->
@@ -295,6 +305,7 @@ fun SettingsScreen(
                                 onBassBoostChange = viewModel::setBassBoost,
                                 onSensitivityChange = viewModel::setSensitivity,
                                 onSmoothingChange = viewModel::setSmoothing,
+                                onFreqRangeChange = viewModel::setFreqRange,
                                 onSyncOffsetChange = viewModel::setSyncOffsetMs
                             )
 
@@ -303,10 +314,14 @@ fun SettingsScreen(
                                 onSpeedChange = viewModel::setRotationSpeed,
                                 onSpreadChange = viewModel::setSpreadScale,
                                 onThicknessChange = viewModel::setStrokeThickness,
+                                onCameraShakeChange = viewModel::setCameraShakeIntensity,
+                                onRgbSplitChange = viewModel::setRgbSplitIntensity,
                                 onToggleGlow = { viewModel.setGlowEnabled(!config.glowEnabled) },
+                                onToggleAdditiveBlend = { viewModel.setAdditiveBlendEnabled(!config.additiveBlendEnabled) },
                                 onToggleParticles = { viewModel.setParticlesEnabled(!config.particlesEnabled) },
                                 onTogglePeakCaps = { viewModel.setPeakCapsEnabled(!config.peakCapsEnabled) },
-                                onToggleMirror = { viewModel.setMirrorEnabled(!config.mirrorEnabled) }
+                                onToggleMirror = { viewModel.setMirrorEnabled(!config.mirrorEnabled) },
+                                onToggleSharpBars = { viewModel.setSharpBarsEnabled(!config.sharpBarsEnabled) }
                             )
 
                             SettingsCategory.UPDATES_AND_CHANGELOG -> UpdatesAndChangelogSection(
@@ -534,6 +549,17 @@ private fun StickyLivePreviewStage(
     visualizerBus: VisualizerBus,
     showBeatBadge: Boolean
 ) {
+    val (previewPunch, previewTimeSec) = rememberBeatPunchState(
+        frame = frame,
+        config = config,
+        isPlaying = isPlaying,
+        demoWhenIdle = true,
+        visualizerBus = visualizerBus,
+        enabled = config.cameraShakeIntensity > 0.01f ||
+            config.rgbSplitIntensity > 0.01f ||
+            config.backgroundMode == BackgroundVisualMode.BLURRED_ALBUM_ART
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -547,29 +573,47 @@ private fun StickyLivePreviewStage(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            VisualizerCanvas(
-                frame = frame,
+            AveeBackgroundLayer(
+                track = currentTrack,
                 config = config,
-                isPlaying = isPlaying,
-                demoWhenIdle = true,
-                centerRingRadiusRatio = 0.25f,
-                centerRingRadiusDp = 58.dp,
-                visualizerBus = visualizerBus,
+                punch = previewPunch,
                 modifier = Modifier.fillMaxSize()
             )
-            CoverArtView(
-                track = currentTrack,
-                style = config.coverArtStyle,
-                isPlaying = isPlaying,
-                bassEnergy = frame.bassEnergy,
-                beatPulse = frame.beatPulse,
-                sensitivity = config.sensitivity,
-                beatPunch = config.beatPunch,
-                syncOffsetMs = config.syncOffsetMs,
-                demoWhenIdle = true,
-                visualizerBus = visualizerBus,
-                size = 104.dp
-            )
+            AveeStagePostFxBox(
+                config = config,
+                punch = previewPunch,
+                timeSec = previewTimeSec,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    VisualizerCanvas(
+                        frame = frame,
+                        config = config,
+                        isPlaying = isPlaying,
+                        demoWhenIdle = true,
+                        centerRingRadiusRatio = 0.25f,
+                        centerRingRadiusDp = 58.dp,
+                        visualizerBus = visualizerBus,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    CoverArtView(
+                        track = currentTrack,
+                        style = config.coverArtStyle,
+                        isPlaying = isPlaying,
+                        bassEnergy = frame.bassEnergy,
+                        beatPulse = frame.beatPulse,
+                        sensitivity = config.sensitivity,
+                        beatPunch = config.beatPunch,
+                        syncOffsetMs = config.syncOffsetMs,
+                        demoWhenIdle = true,
+                        visualizerBus = visualizerBus,
+                        size = 104.dp
+                    )
+                }
+            }
 
             if (showBeatBadge) {
                 val pulseScale by animateFloatAsState(
@@ -626,13 +670,16 @@ private fun StickyLivePreviewStage(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemeAndCoverSection(
     config: VisualizerConfig,
     onSelectDynamicAccent: () -> Unit,
     onSelectAccentPreset: (AppAccentPreset) -> Unit,
     onOpenAppColorPicker: () -> Unit,
-    onSelectCoverArtStyle: (CoverArtStyle) -> Unit
+    onSelectCoverArtStyle: (CoverArtStyle) -> Unit,
+    onSelectBackgroundMode: (BackgroundVisualMode) -> Unit,
+    onToggleVignette: () -> Unit
 ) {
     SettingsSectionCard {
         AppColorDropdown(
@@ -644,27 +691,85 @@ private fun ThemeAndCoverSection(
             onOpenCustomPicker = onOpenAppColorPicker
         )
 
-        OptionDropdown(
-            label = "Cover Art",
-            selectedText = config.coverArtStyle.displayName,
-            options = CoverArtStyle.entries,
-            optionLabel = { it.displayName },
-            selectedOption = config.coverArtStyle,
-            onOptionSelected = onSelectCoverArtStyle
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OptionDropdown(
+                label = "Cover Art",
+                selectedText = config.coverArtStyle.displayName,
+                options = CoverArtStyle.entries,
+                optionLabel = { it.displayName },
+                selectedOption = config.coverArtStyle,
+                onOptionSelected = onSelectCoverArtStyle,
+                modifier = Modifier.weight(1f)
+            )
+
+            OptionDropdown(
+                label = "Background",
+                selectedText = config.backgroundMode.displayName,
+                options = BackgroundVisualMode.entries,
+                optionLabel = { it.displayName },
+                selectedOption = config.backgroundMode,
+                onOptionSelected = onSelectBackgroundMode,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            FilterChip(
+                selected = config.vignetteEnabled,
+                onClick = onToggleVignette,
+                label = { Text("Cinematic Vignette") }
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VisualizerStyleSection(
     config: VisualizerConfig,
     dynamicAccent: AccentColors,
+    onApplyScenePreset: (AveeScenePreset) -> Unit,
     onSelectStyle: (VisualizerStyle) -> Unit,
+    onSelectParticleOverlay: (ParticleOverlayStyle) -> Unit,
     onSelectEmberDirection: (EmberDirection) -> Unit,
     onSelectFillMode: (VisualizerFillMode) -> Unit,
     onSelectColorScheme: (VisualizerColorScheme) -> Unit,
     onSelectDensity: (VisualizerDensity) -> Unit
 ) {
+    val activeScene = config.matchingScenePreset()
+    SettingsSectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Avee Scene Presets", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = activeScene?.displayName ?: "Custom",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AveeScenePreset.entries.forEach { preset ->
+                FilterChip(
+                    selected = activeScene == preset,
+                    onClick = { onApplyScenePreset(preset) },
+                    label = { Text(preset.displayName) }
+                )
+            }
+        }
+    }
+
     SettingsSectionCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -692,12 +797,29 @@ private fun VisualizerStyleSection(
         }
 
         AnimatedVisibility(
-            visible = config.style == VisualizerStyle.FIRE_EMBER,
+            visible = config.style != VisualizerStyle.FIRE_EMBER,
+            enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+            exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
+        ) {
+            OptionDropdown(
+                label = "Particle Overlay",
+                selectedText = config.particleOverlay.displayName,
+                options = ParticleOverlayStyle.entries,
+                optionLabel = { it.displayName },
+                selectedOption = config.particleOverlay,
+                onOptionSelected = onSelectParticleOverlay
+            )
+        }
+
+        val showEmberDirection = config.style == VisualizerStyle.FIRE_EMBER ||
+            config.particleOverlay == ParticleOverlayStyle.EMBERS
+        AnimatedVisibility(
+            visible = showEmberDirection,
             enter = fadeIn(tween(220)) + expandVertically(tween(220)),
             exit = fadeOut(tween(180)) + shrinkVertically(tween(180))
         ) {
             OptionDropdown(
-                label = "Particle Direction",
+                label = "Ember Direction",
                 selectedText = config.emberDirection.displayName,
                 options = EmberDirection.entries,
                 optionLabel = { it.displayName },
@@ -768,6 +890,7 @@ private fun BeatAndAudioTuningSection(
     onBassBoostChange: (Float) -> Unit,
     onSensitivityChange: (Float) -> Unit,
     onSmoothingChange: (Float) -> Unit,
+    onFreqRangeChange: (Int, Int) -> Unit,
     onSyncOffsetChange: (Int) -> Unit
 ) {
     val activePreset = config.matchingTuningPreset()
@@ -851,6 +974,40 @@ private fun BeatAndAudioTuningSection(
 
     SettingsSectionCard {
         Text(
+            text = "Frequency Window (AudioProvider)",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        SettingSlider(
+            label = "Lower Hz",
+            valueText = "${config.freqMinHz} Hz",
+            value = config.freqMinHz.toFloat(),
+            range = 20f..500f,
+            onValueChange = { raw ->
+                val snapped = ((raw / 10f).roundToInt() * 10).coerceIn(20, 500)
+                onFreqRangeChange(snapped, config.freqMaxHz)
+            }
+        )
+
+        SettingSlider(
+            label = "Higher Hz",
+            valueText = if (config.freqMaxHz >= 1000) {
+                String.format(Locale.US, "%.1f kHz", config.freqMaxHz / 1000f)
+            } else {
+                "${config.freqMaxHz} Hz"
+            },
+            value = config.freqMaxHz.toFloat(),
+            range = 1000f..16000f,
+            onValueChange = { raw ->
+                val snapped = ((raw / 250f).roundToInt() * 250).coerceIn(1000, 16000)
+                onFreqRangeChange(config.freqMinHz, snapped)
+            }
+        )
+    }
+
+    SettingsSectionCard {
+        Text(
             text = "Timing Calibration",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary
@@ -882,11 +1039,39 @@ private fun MotionAndEffectsSection(
     onSpeedChange: (Float) -> Unit,
     onSpreadChange: (Float) -> Unit,
     onThicknessChange: (Float) -> Unit,
+    onCameraShakeChange: (Float) -> Unit,
+    onRgbSplitChange: (Float) -> Unit,
     onToggleGlow: () -> Unit,
+    onToggleAdditiveBlend: () -> Unit,
     onToggleParticles: () -> Unit,
     onTogglePeakCaps: () -> Unit,
-    onToggleMirror: () -> Unit
+    onToggleMirror: () -> Unit,
+    onToggleSharpBars: () -> Unit
 ) {
+    SettingsSectionCard {
+        Text(
+            text = "Avee Post-FX",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        SettingSlider(
+            label = "Beat Camera Shake",
+            valueText = String.format(Locale.US, "%.2fx", config.cameraShakeIntensity),
+            value = config.cameraShakeIntensity,
+            range = 0f..1.5f,
+            onValueChange = onCameraShakeChange
+        )
+
+        SettingSlider(
+            label = "RGB Split (Chromatic)",
+            valueText = String.format(Locale.US, "%.2fx", config.rgbSplitIntensity),
+            value = config.rgbSplitIntensity,
+            range = 0f..1.5f,
+            onValueChange = onRgbSplitChange
+        )
+    }
+
     SettingsSectionCard {
         Text(
             text = "Motion & Geometry",
@@ -931,6 +1116,11 @@ private fun MotionAndEffectsSection(
                 label = { Text("Glow") }
             )
             FilterChip(
+                selected = config.additiveBlendEnabled,
+                onClick = onToggleAdditiveBlend,
+                label = { Text("Additive Blend") }
+            )
+            FilterChip(
                 selected = config.particlesEnabled,
                 onClick = onToggleParticles,
                 label = { Text("Particles") }
@@ -944,6 +1134,11 @@ private fun MotionAndEffectsSection(
                 selected = config.mirrorEnabled,
                 onClick = onToggleMirror,
                 label = { Text("Mirror") }
+            )
+            FilterChip(
+                selected = config.sharpBarsEnabled,
+                onClick = onToggleSharpBars,
+                label = { Text("Sharp Bars") }
             )
         }
     }
@@ -1321,7 +1516,7 @@ private fun buildThemeSummary(config: VisualizerConfig): String {
                 it.secondaryHex == config.customAppSecondaryArgb
         }?.displayName ?: "Custom"
     }
-    return "$accentLabel • ${config.coverArtStyle.displayName}"
+    return "$accentLabel • ${config.coverArtStyle.displayName} • ${config.backgroundMode.displayName}"
 }
 
 private fun buildStyleSummary(config: VisualizerConfig): String {
@@ -1330,28 +1525,32 @@ private fun buildStyleSummary(config: VisualizerConfig): String {
     } else {
         config.style.displayName
     }
-    val densityPart = if (config.style == VisualizerStyle.FIRE_EMBER) {
-        config.density.emberCountLabel()
+    val overlayPart = if (config.style != VisualizerStyle.FIRE_EMBER &&
+        config.particleOverlay != ParticleOverlayStyle.OFF
+    ) {
+        " + ${config.particleOverlay.displayName}"
     } else {
-        "${config.density.displayName} bands"
+        ""
     }
-    return "$stylePart • ${config.fillMode.displayName} • ${config.colorScheme.displayName} • $densityPart"
+    return "$stylePart$overlayPart • ${config.fillMode.displayName} • ${config.colorScheme.displayName}"
 }
 
 private fun buildBeatSummary(config: VisualizerConfig): String {
     val presetName = config.matchingTuningPreset()?.displayName ?: "Custom"
     val punchStr = String.format(Locale.US, "%.1fx", config.beatPunch)
-    return "$presetName • Punch $punchStr • Sync ${formatSyncOffset(config.syncOffsetMs)}"
+    return "$presetName • Punch $punchStr • ${config.freqMinHz}–${config.freqMaxHz / 1000}kHz"
 }
 
 private fun buildEffectsSummary(config: VisualizerConfig): String {
     val activeEffects = buildList {
+        if (config.cameraShakeIntensity > 0.01f) add("Shake")
+        if (config.rgbSplitIntensity > 0.01f) add("RGB Split")
         if (config.glowEnabled) add("Glow")
-        if (config.particlesEnabled) add("Particles")
-        if (config.peakCapsEnabled) add("Peak Dots")
+        if (config.additiveBlendEnabled) add("Add")
+        if (config.sharpBarsEnabled) add("Sharp")
         if (config.mirrorEnabled) add("Mirror")
     }
-    val effectsText = if (activeEffects.isEmpty()) "No effects" else activeEffects.joinToString(", ")
+    val effectsText = if (activeEffects.isEmpty()) "Clean" else activeEffects.joinToString(", ")
     return String.format(Locale.US, "Speed %.1fx • %s", config.rotationSpeed, effectsText)
 }
 

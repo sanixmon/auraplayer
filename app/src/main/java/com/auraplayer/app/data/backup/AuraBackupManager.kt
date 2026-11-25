@@ -157,6 +157,30 @@ class AuraBackupManager(
             if (savedConfig.syncOffsetMs != null) {
                 visualizerPreferences.updateSyncOffsetMs(domain.syncOffsetMs)
             }
+            if (savedConfig.freqMinHz != null || savedConfig.freqMaxHz != null) {
+                visualizerPreferences.updateFreqRange(domain.freqMinHz, domain.freqMaxHz)
+            }
+            if (savedConfig.backgroundMode != null) {
+                visualizerPreferences.updateBackgroundMode(domain.backgroundMode)
+            }
+            if (savedConfig.particleOverlay != null) {
+                visualizerPreferences.updateParticleOverlay(domain.particleOverlay)
+            }
+            if (savedConfig.cameraShakeIntensity != null) {
+                visualizerPreferences.updateCameraShakeIntensity(domain.cameraShakeIntensity)
+            }
+            if (savedConfig.rgbSplitIntensity != null) {
+                visualizerPreferences.updateRgbSplitIntensity(domain.rgbSplitIntensity)
+            }
+            if (savedConfig.additiveBlendEnabled != null) {
+                visualizerPreferences.updateAdditiveBlendEnabled(domain.additiveBlendEnabled)
+            }
+            if (savedConfig.vignetteEnabled != null) {
+                visualizerPreferences.updateVignetteEnabled(domain.vignetteEnabled)
+            }
+            if (savedConfig.sharpBarsEnabled != null) {
+                visualizerPreferences.updateSharpBarsEnabled(domain.sharpBarsEnabled)
+            }
             visualizerPreferences.updateGlowEnabled(domain.glowEnabled)
             visualizerPreferences.updateMirrorEnabled(domain.mirrorEnabled)
             visualizerPreferences.updatePeakCapsEnabled(domain.peakCapsEnabled)

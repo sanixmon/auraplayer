@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import com.auraplayer.app.data.model.EmberDirection
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -357,11 +359,17 @@ fun VisualizerCanvas(
             }
         }
 
-        if ((isPlaying || demoWhenIdle) && config.particlesEnabled) {
-            val particleVelocity = (0.20f + smoothedBass * 0.9f + smoothedPunch * 1.45f) *
-                (0.4f + spinSpeed * 0.6f)
+        if ((isPlaying || demoWhenIdle) &&
+            config.particlesEnabled &&
+            config.particleOverlay != ParticleOverlayStyle.OFF
+        ) {
+            val overlaySpeedBoost = if (config.particleOverlay == ParticleOverlayStyle.STARFIELD) {
+                (0.28f + smoothedBass * 0.75f + smoothedPunch * 2.25f) * (0.45f + spinSpeed * 0.65f)
+            } else {
+                (0.20f + smoothedBass * 0.9f + smoothedPunch * 1.45f) * (0.4f + spinSpeed * 0.6f)
+            }
             for (p in particles) {
-                p.radiusProgress = (p.radiusProgress + particleVelocity * dt * p.speedFactor) % 1f
+                p.radiusProgress = (p.radiusProgress + overlaySpeedBoost * dt * p.speedFactor) % 1f
             }
         }
 
@@ -457,12 +465,94 @@ fun VisualizerCanvas(
 
         val explicitCenterRadiusPx = centerRingRadiusDp?.toPx()
         val effectiveCenter = centerOverride ?: Offset(size.width / 2f, size.height / 2f)
+        val glowBlend = if (config.additiveBlendEnabled) BlendMode.Plus else BlendMode.SrcOver
+
+        // Avee-style layered Ambient Particle Overlay behind any non-Fire-Ember visualizer
+        if (config.style != VisualizerStyle.FIRE_EMBER &&
+            config.particlesEnabled &&
+            config.particleOverlay != ParticleOverlayStyle.OFF &&
+            emberActiveAlpha > 0.01f
+        ) {
+            when (config.particleOverlay) {
+                ParticleOverlayStyle.BOKEH_RADIAL -> drawBokehOverlay(
+                    particles = particles,
+                    palette = palette,
+                    config = config,
+                    punch = smoothedPunch,
+                    activeAlpha = emberActiveAlpha,
+                    timeSec = animTimeSec,
+                    center = effectiveCenter,
+                    centerRingRatio = centerRingRadiusRatio,
+                    explicitCenterRadiusPx = explicitCenterRadiusPx,
+                    thickness = thickness,
+                    spinSpeed = spinSpeed,
+                    glowBlend = glowBlend
+                )
+                ParticleOverlayStyle.STARFIELD -> drawStarfieldOverlay(
+                    particles = particles,
+                    palette = palette,
+                    config = config,
+                    punch = smoothedPunch,
+                    activeAlpha = emberActiveAlpha,
+                    center = effectiveCenter,
+                    thickness = thickness,
+                    glowBlend = glowBlend
+                )
+                ParticleOverlayStyle.EMBERS -> {
+                    if (lastEmberDirection[0] != config.emberDirection ||
+                        lastEmberMirror[0] != config.mirrorEnabled
+                    ) {
+                        lastEmberDirection[0] = config.emberDirection
+                        lastEmberMirror[0] = config.mirrorEnabled
+                        for (i in emberParticles.indices) {
+                            respawnEmber(
+                                particle = emberParticles[i],
+                                direction = config.emberDirection,
+                                mirrorEnabled = config.mirrorEnabled,
+                                bands = smoothedBands,
+                                rng = emberRng,
+                                prewarm = true
+                            )
+                        }
+                    }
+                    val triggerAmbientBurst = (isPlaying || useDemo) &&
+                        config.beatPunch > 0.05f &&
+                        (currentBeatPulse > 0.36f || targetPunch > 0.62f) &&
+                        animTimeSec - lastEmberBurstTimeSec > 0.16f
+                    if (triggerAmbientBurst) {
+                        lastEmberBurstTimeSec = animTimeSec
+                    }
+                    drawFireEmber(
+                        embers = emberParticles,
+                        bands = smoothedBands,
+                        rng = emberRng,
+                        bassEnergy = smoothedBass,
+                        punch = smoothedPunch,
+                        triggerBeatBurst = triggerAmbientBurst,
+                        activeAlpha = emberActiveAlpha * 0.85f,
+                        palette = palette,
+                        config = config,
+                        dt = dt,
+                        timeSec = animTimeSec,
+                        center = effectiveCenter,
+                        centerRingRatio = centerRingRadiusRatio,
+                        explicitCenterRadiusPx = explicitCenterRadiusPx,
+                        spread = spread,
+                        thickness = thickness * 0.88f,
+                        spinSpeed = spinSpeed,
+                        isActive = isPlaying || useDemo,
+                        glowBlend = glowBlend,
+                        drawEdgeGlow = false
+                    )
+                }
+                ParticleOverlayStyle.OFF -> Unit
+            }
+        }
 
         when (config.style) {
             VisualizerStyle.CIRCULAR_AURA -> drawRingVisualizer(
                 bands = smoothedBands,
                 peaks = peakCaps,
-                particles = particles,
                 shockwaves = shockwaves,
                 pointsX = ringPointsX,
                 pointsY = ringPointsY,
@@ -478,7 +568,8 @@ fun VisualizerCanvas(
                 explicitCenterRadiusPx = explicitCenterRadiusPx,
                 spread = spread,
                 thickness = thickness,
-                spinSpeed = spinSpeed
+                spinSpeed = spinSpeed,
+                glowBlend = glowBlend
             )
             VisualizerStyle.BARS -> drawBars(
                 bands = smoothedBands,
@@ -584,9 +675,49 @@ fun VisualizerCanvas(
                     spread = spread,
                     thickness = thickness,
                     spinSpeed = spinSpeed,
-                    isActive = isPlaying || useDemo
+                    isActive = isPlaying || useDemo,
+                    glowBlend = glowBlend,
+                    drawEdgeGlow = true
                 )
             }
+            VisualizerStyle.POLYGON_RING -> drawPolygonRing(
+                bands = smoothedBands,
+                peaks = peakCaps,
+                polygonPath = primaryPath,
+                outerPath = secondaryPath,
+                pointsX = ringPointsX,
+                pointsY = ringPointsY,
+                bassEnergy = smoothedBass,
+                punch = smoothedPunch,
+                palette = palette,
+                config = config,
+                timeSec = animTimeSec,
+                center = effectiveCenter,
+                centerRingRatio = centerRingRadiusRatio,
+                explicitCenterRadiusPx = explicitCenterRadiusPx,
+                spread = spread,
+                thickness = thickness,
+                spinSpeed = spinSpeed,
+                glowBlend = glowBlend
+            )
+            VisualizerStyle.SPIRAL_VORTEX -> drawSpiralVortex(
+                bands = smoothedBands,
+                spiralPath = primaryPath,
+                polyX = polyPointsX,
+                polyY = polyPointsY,
+                bassEnergy = smoothedBass,
+                punch = smoothedPunch,
+                palette = palette,
+                config = config,
+                timeSec = animTimeSec,
+                center = effectiveCenter,
+                centerRingRatio = centerRingRadiusRatio,
+                explicitCenterRadiusPx = explicitCenterRadiusPx,
+                spread = spread,
+                thickness = thickness,
+                spinSpeed = spinSpeed,
+                glowBlend = glowBlend
+            )
         }
     }
 }
@@ -594,7 +725,6 @@ fun VisualizerCanvas(
 private fun DrawScope.drawRingVisualizer(
     bands: FloatArray,
     peaks: FloatArray,
-    particles: List<RadialParticle>,
     shockwaves: List<ShockwaveRing>,
     pointsX: FloatArray,
     pointsY: FloatArray,
@@ -610,7 +740,8 @@ private fun DrawScope.drawRingVisualizer(
     explicitCenterRadiusPx: Float?,
     spread: Float,
     thickness: Float,
-    spinSpeed: Float
+    spinSpeed: Float,
+    glowBlend: BlendMode
 ) {
     val count = bands.size
     if (count < 3) return
@@ -641,7 +772,8 @@ private fun DrawScope.drawRingVisualizer(
                 radius = haloRadius
             ),
             radius = haloRadius,
-            center = center
+            center = center,
+            blendMode = glowBlend
         )
     }
 
@@ -654,42 +786,9 @@ private fun DrawScope.drawRingVisualizer(
             color = palette.start.copy(alpha = swAlpha),
             radius = swRadius,
             center = center,
-            style = Stroke(width = (2.2f * (1f - sw.progress) + 0.8f) * pxDensity * thickness)
+            style = Stroke(width = (2.2f * (1f - sw.progress) + 0.8f) * pxDensity * thickness),
+            blendMode = glowBlend
         )
-    }
-
-    // 3. Density-scaled sharp bokeh particles
-    if (config.particlesEnabled) {
-        val maxParticleRadius = maxDim * 0.56f
-        for (p in particles) {
-            val r = baseRadius * 0.92f + p.radiusProgress * (maxParticleRadius - baseRadius * 0.85f)
-            val a = p.angleRad + timeSec * 0.16f * spinSpeed * p.speedFactor
-            val pos = Offset(center.x + cos(a) * r, center.y + sin(a) * r)
-            val alpha = ((1f - p.radiusProgress) * (0.38f + punch * 0.62f)).coerceIn(0f, 0.95f)
-            val particleColor = when (p.colorIndex) {
-                0 -> palette.start
-                1 -> palette.mid
-                else -> palette.end
-            }
-            val dotRadius = p.baseSizeDp * pxDensity * thickness * (0.85f + punch * 0.45f)
-            if (config.glowEnabled) {
-                drawCircle(
-                    color = particleColor.copy(alpha = alpha * 0.26f),
-                    radius = dotRadius * 2.1f,
-                    center = pos
-                )
-            }
-            drawCircle(
-                color = particleColor.copy(alpha = alpha),
-                radius = dotRadius,
-                center = pos
-            )
-            drawCircle(
-                color = Color.White.copy(alpha = alpha * 0.65f),
-                radius = dotRadius * 0.42f,
-                center = pos
-            )
-        }
     }
 
     // 4. Outer contour aura + Solid / Line / None rendering
@@ -1017,7 +1116,8 @@ private fun DrawScope.drawBars(
         val x = i * slotWidth + gapOffset
         val topY = baselineY - barHeight
         val rectH = if (config.mirrorEnabled) barHeight * 2f else barHeight
-        val cr = CornerRadius(barWidth / 2f, barWidth / 2f)
+        val cornerPx = if (config.sharpBarsEnabled) 1.2f * pxDensity else barWidth / 2f
+        val cr = CornerRadius(cornerPx, cornerPx)
 
         if (isWireframe) {
             if (config.glowEnabled) {
@@ -1317,7 +1417,8 @@ private fun DrawScope.drawMirrorSpectrum(
         val offset = i * slotWidth + (slotWidth - barWidth) / 2f
         val rightX = centerX + offset
         val leftX = centerX - offset - barWidth
-        val cr = CornerRadius(barWidth / 2f, barWidth / 2f)
+        val cornerPx = if (config.sharpBarsEnabled) 1.2f * pxDensity else barWidth / 2f
+        val cr = CornerRadius(cornerPx, cornerPx)
 
         if (isWireframe) {
             val stroke = Stroke(width = 1.3f * pxDensity * thickness)
@@ -1636,7 +1737,9 @@ private fun DrawScope.drawFireEmber(
     spread: Float,
     thickness: Float,
     spinSpeed: Float,
-    isActive: Boolean
+    isActive: Boolean,
+    glowBlend: BlendMode = BlendMode.SrcOver,
+    drawEdgeGlow: Boolean = true
 ) {
     if (activeAlpha <= 0.005f) return
 
@@ -1661,7 +1764,7 @@ private fun DrawScope.drawFireEmber(
     ) * (0.76f + spread * 0.26f)
 
     // 1. Soft ambient heat glow at emitter edge (or around cover art for Radial)
-    if (config.glowEnabled) {
+    if (drawEdgeGlow && config.glowEnabled) {
         val heatAlpha = ((0.12f + bassEnergy * 0.14f + punch * 0.34f) * activeAlpha).coerceIn(0f, 0.58f)
         drawAmbientHeatEdge(
             direction = direction,
@@ -1797,12 +1900,14 @@ private fun DrawScope.drawFireEmber(
                         start = tailPos,
                         end = pos,
                         strokeWidth = radius * 2.9f,
-                        cap = StrokeCap.Round
+                        cap = StrokeCap.Round,
+                        blendMode = glowBlend
                     )
                     drawCircle(
                         color = emberColor.copy(alpha = alpha * 0.28f),
                         radius = radius * 2.2f,
-                        center = pos
+                        center = pos,
+                        blendMode = glowBlend
                     )
                 }
                 drawLine(
@@ -1814,17 +1919,20 @@ private fun DrawScope.drawFireEmber(
                     start = tailPos,
                     end = pos,
                     strokeWidth = radius * 1.45f,
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
+                    blendMode = glowBlend
                 )
                 drawCircle(
                     color = emberColor.copy(alpha = alpha),
                     radius = radius,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
                 drawCircle(
                     color = Color.White.copy(alpha = hotCoreAlpha),
                     radius = radius * 0.48f,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
             }
             VisualizerFillMode.SOLID -> {
@@ -1832,23 +1940,27 @@ private fun DrawScope.drawFireEmber(
                     drawCircle(
                         color = emberColor.copy(alpha = alpha * 0.18f),
                         radius = radius * 3.1f,
-                        center = pos
+                        center = pos,
+                        blendMode = glowBlend
                     )
                     drawCircle(
                         color = emberColor.copy(alpha = alpha * 0.34f),
                         radius = radius * 1.9f,
-                        center = pos
+                        center = pos,
+                        blendMode = glowBlend
                     )
                 }
                 drawCircle(
                     color = emberColor.copy(alpha = alpha),
                     radius = radius * 1.2f,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
                 drawCircle(
                     color = Color.White.copy(alpha = hotCoreAlpha),
                     radius = radius * 0.56f,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
             }
             VisualizerFillMode.NONE -> {
@@ -1857,20 +1969,452 @@ private fun DrawScope.drawFireEmber(
                     drawCircle(
                         color = emberColor.copy(alpha = alpha * 0.20f),
                         radius = sparkR * 1.65f,
-                        center = pos
+                        center = pos,
+                        blendMode = glowBlend
                     )
                 }
                 drawCircle(
                     color = emberColor.copy(alpha = alpha),
                     radius = sparkR,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
                 drawCircle(
                     color = Color.White.copy(alpha = hotCoreAlpha),
                     radius = sparkR * 0.42f,
-                    center = pos
+                    center = pos,
+                    blendMode = glowBlend
                 )
             }
+        }
+    }
+}
+
+private fun DrawScope.drawBokehOverlay(
+    particles: List<RadialParticle>,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    punch: Float,
+    activeAlpha: Float,
+    timeSec: Float,
+    center: Offset,
+    centerRingRatio: Float,
+    explicitCenterRadiusPx: Float?,
+    thickness: Float,
+    spinSpeed: Float,
+    glowBlend: BlendMode
+) {
+    val pxDensity = density
+    val minDim = min(size.width, size.height)
+    val maxDim = max(size.width, size.height)
+    val baseRadius = if (explicitCenterRadiusPx != null) {
+        explicitCenterRadiusPx * (1f + (punch * 0.145f).coerceIn(0f, 0.22f))
+    } else {
+        minDim * centerRingRatio.coerceIn(0.16f, 0.36f)
+    }
+    val maxParticleRadius = maxDim * 0.58f
+
+    for (p in particles) {
+        val r = baseRadius * 0.92f + p.radiusProgress * (maxParticleRadius - baseRadius * 0.85f)
+        val a = p.angleRad + timeSec * 0.16f * spinSpeed * p.speedFactor
+        val pos = Offset(center.x + cos(a) * r, center.y + sin(a) * r)
+        val alpha = ((1f - p.radiusProgress) * (0.36f + punch * 0.60f) * activeAlpha).coerceIn(0f, 0.95f)
+        if (alpha <= 0.01f) continue
+        val particleColor = when (p.colorIndex) {
+            0 -> palette.start
+            1 -> palette.mid
+            else -> palette.end
+        }
+        val dotRadius = p.baseSizeDp * pxDensity * thickness * (0.85f + punch * 0.45f)
+        if (config.glowEnabled) {
+            drawCircle(
+                color = particleColor.copy(alpha = alpha * 0.26f),
+                radius = dotRadius * 2.2f,
+                center = pos,
+                blendMode = glowBlend
+            )
+        }
+        drawCircle(
+            color = particleColor.copy(alpha = alpha),
+            radius = dotRadius,
+            center = pos,
+            blendMode = glowBlend
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = alpha * 0.65f),
+            radius = dotRadius * 0.42f,
+            center = pos,
+            blendMode = glowBlend
+        )
+    }
+}
+
+private fun DrawScope.drawStarfieldOverlay(
+    particles: List<RadialParticle>,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    punch: Float,
+    activeAlpha: Float,
+    center: Offset,
+    thickness: Float,
+    glowBlend: BlendMode
+) {
+    val pxDensity = density
+    val maxR = hypot(max(center.x, size.width - center.x), max(center.y, size.height - center.y)) * 1.05f
+
+    for (p in particles) {
+        val eased = p.radiusProgress.pow(1.65f)
+        val r = eased * maxR
+        val cosA = cos(p.angleRad)
+        val sinA = sin(p.angleRad)
+        val head = Offset(center.x + cosA * r, center.y + sinA * r)
+        val streakLen = ((4f + eased * 18f + punch * 18f) * pxDensity * p.speedFactor).coerceAtMost(r)
+        val tail = Offset(head.x - cosA * streakLen, head.y - sinA * streakLen)
+        val alpha = (eased.pow(0.55f) * (1f - p.radiusProgress * 0.35f) * (0.45f + punch * 0.55f) * activeAlpha)
+            .coerceIn(0f, 0.95f)
+        if (alpha <= 0.01f) continue
+        val starColor = when (p.colorIndex) {
+            0 -> Color.White
+            1 -> palette.start
+            else -> palette.end
+        }
+        val strokeW = (0.9f + eased * 1.6f) * pxDensity * thickness
+        if (config.glowEnabled) {
+            drawLine(
+                color = starColor.copy(alpha = alpha * 0.28f),
+                start = tail,
+                end = head,
+                strokeWidth = strokeW * 2.4f,
+                cap = StrokeCap.Round,
+                blendMode = glowBlend
+            )
+        }
+        drawLine(
+            brush = Brush.linearGradient(
+                colors = listOf(Color.Transparent, starColor.copy(alpha = alpha)),
+                start = tail,
+                end = head
+            ),
+            start = tail,
+            end = head,
+            strokeWidth = strokeW,
+            cap = StrokeCap.Round,
+            blendMode = glowBlend
+        )
+    }
+}
+
+/**
+ * Avee-inspired `SidedPolygon` spectrum path (rotating 6-sided geometric polygon perimeter
+ * with audio-reactive normal spikes, glowing vertices, and solid/line/wireframe modes).
+ */
+private fun DrawScope.drawPolygonRing(
+    bands: FloatArray,
+    peaks: FloatArray,
+    polygonPath: Path,
+    outerPath: Path,
+    pointsX: FloatArray,
+    pointsY: FloatArray,
+    bassEnergy: Float,
+    punch: Float,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    timeSec: Float,
+    center: Offset,
+    centerRingRatio: Float,
+    explicitCenterRadiusPx: Float?,
+    spread: Float,
+    thickness: Float,
+    spinSpeed: Float,
+    glowBlend: BlendMode
+) {
+    val count = bands.size
+    if (count < 6) return
+    val sides = 6
+    val pxDensity = density
+    val minDim = min(size.width, size.height)
+    val baseRadius = if (explicitCenterRadiusPx != null) {
+        explicitCenterRadiusPx * (1f + (punch * 0.145f).coerceIn(0f, 0.22f)) + 10f * pxDensity
+    } else {
+        minDim * centerRingRatio.coerceIn(0.18f, 0.36f) + punch * (minDim * 0.045f)
+    }
+    val maxSpike = minDim * (0.20f + punch * 0.06f) * spread
+    val rot = timeSec * 0.22f * spinSpeed
+    val sideAngle = (2.0 * PI / sides).toFloat()
+
+    // Base hexagon path
+    polygonPath.reset()
+    for (s in 0 until sides) {
+        val a = rot + s * sideAngle
+        val vx = center.x + cos(a) * baseRadius
+        val vy = center.y + sin(a) * baseRadius
+        if (s == 0) polygonPath.moveTo(vx, vy) else polygonPath.lineTo(vx, vy)
+    }
+    polygonPath.close()
+
+    if (config.glowEnabled) {
+        val haloR = baseRadius + maxSpike + 26f * pxDensity
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    palette.glow.copy(alpha = (0.16f + bassEnergy * 0.12f + punch * 0.20f).coerceIn(0f, 0.45f)),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = haloR
+            ),
+            radius = haloR,
+            center = center,
+            blendMode = glowBlend
+        )
+    }
+
+    val halfCount = max(1, count / 2)
+    val spokeW = ((minDim / count) * 0.54f * thickness).coerceIn(1.6f * pxDensity, 5.2f * pxDensity)
+
+    for (i in 0 until count) {
+        val sidePos = (i.toFloat() / count) * sides
+        val sideIdx = sidePos.toInt().coerceIn(0, sides - 1)
+        val frac = sidePos - sideIdx
+        val a0 = rot + sideIdx * sideAngle
+        val a1 = rot + ((sideIdx + 1) % sides) * sideAngle
+        val x0 = center.x + cos(a0) * baseRadius
+        val y0 = center.y + sin(a0) * baseRadius
+        val x1 = center.x + cos(a1) * baseRadius
+        val y1 = center.y + sin(a1) * baseRadius
+        val bx = x0 + (x1 - x0) * frac
+        val by = y0 + (y1 - y0) * frac
+
+        val normalAngle = a0 + sideAngle * 0.5f
+        val nx = cos(normalAngle)
+        val ny = sin(normalAngle)
+
+        val mirrorIdx = if (i < halfCount) i else count - 1 - i
+        val mag = bands[mirrorIdx.coerceIn(0, bands.lastIndex)]
+        val spike = 4f * pxDensity + mag * maxSpike
+        pointsX[i] = bx + nx * spike
+        pointsY[i] = by + ny * spike
+
+        if (config.fillMode != VisualizerFillMode.SOLID) {
+            val t = mirrorIdx.toFloat() / halfCount
+            val barColor = when {
+                t < 0.35f -> palette.start
+                t < 0.7f -> palette.mid
+                else -> palette.end
+            }
+            val startPt = if (config.mirrorEnabled) {
+                Offset(bx - nx * (mag * maxSpike * 0.28f), by - ny * (mag * maxSpike * 0.28f))
+            } else {
+                Offset(bx, by)
+            }
+            val endPt = Offset(pointsX[i], pointsY[i])
+            if (config.glowEnabled) {
+                drawLine(
+                    color = barColor.copy(alpha = 0.24f),
+                    start = startPt,
+                    end = endPt,
+                    strokeWidth = spokeW * 1.9f,
+                    cap = if (config.sharpBarsEnabled) StrokeCap.Butt else StrokeCap.Round,
+                    blendMode = glowBlend
+                )
+            }
+            drawLine(
+                color = barColor,
+                start = startPt,
+                end = endPt,
+                strokeWidth = spokeW,
+                cap = if (config.sharpBarsEnabled) StrokeCap.Butt else StrokeCap.Round
+            )
+        }
+
+        if (config.peakCapsEnabled) {
+            val peakSpike = 8f * pxDensity + peaks[mirrorIdx.coerceIn(0, peaks.lastIndex)] * maxSpike
+            drawCircle(
+                color = Color.White.copy(alpha = 0.90f),
+                radius = 1.5f * pxDensity * thickness,
+                center = Offset(bx + nx * peakSpike, by + ny * peakSpike)
+            )
+        }
+    }
+
+    if (config.fillMode != VisualizerFillMode.NONE) {
+        buildSmoothClosedPath(outerPath, pointsX, pointsY, count)
+        if (config.fillMode == VisualizerFillMode.SOLID) {
+            drawPath(
+                path = outerPath,
+                brush = Brush.sweepGradient(
+                    listOf(
+                        palette.start.copy(alpha = 0.70f),
+                        palette.mid.copy(alpha = 0.68f),
+                        palette.end.copy(alpha = 0.70f),
+                        palette.start.copy(alpha = 0.70f)
+                    ),
+                    center = center
+                )
+            )
+        }
+        if (config.glowEnabled) {
+            drawPath(
+                path = outerPath,
+                color = palette.glow.copy(alpha = 0.30f + punch * 0.20f),
+                style = Stroke(width = 5.0f * pxDensity * thickness, join = StrokeJoin.Round),
+                blendMode = glowBlend
+            )
+        }
+        drawPath(
+            path = outerPath,
+            brush = Brush.sweepGradient(listOf(palette.start, palette.mid, palette.end, palette.start), center = center),
+            style = Stroke(width = 2.0f * pxDensity * thickness, join = StrokeJoin.Round)
+        )
+    }
+
+    // Crisp inner hexagon frame + glowing vertices
+    if (config.glowEnabled) {
+        drawPath(
+            path = polygonPath,
+            color = palette.glow.copy(alpha = 0.28f + punch * 0.22f),
+            style = Stroke(width = 4.6f * pxDensity * thickness, join = StrokeJoin.Miter),
+            blendMode = glowBlend
+        )
+    }
+    drawPath(
+        path = polygonPath,
+        brush = Brush.sweepGradient(listOf(palette.start, palette.mid, palette.end, palette.start), center = center),
+        style = Stroke(width = 2.0f * pxDensity * thickness, join = StrokeJoin.Miter)
+    )
+    for (s in 0 until sides) {
+        val a = rot + s * sideAngle
+        val vPos = Offset(center.x + cos(a) * baseRadius, center.y + sin(a) * baseRadius)
+        drawCircle(
+            color = Color.White.copy(alpha = 0.85f),
+            radius = (2.4f + punch * 1.4f) * pxDensity * thickness,
+            center = vPos,
+            blendMode = glowBlend
+        )
+    }
+}
+
+/**
+ * Avee-inspired `Spiral` spectrum path: rotating Archimedean spiral radiating outward
+ * with band-driven radial modulation and glowing frequency nodes.
+ */
+private fun DrawScope.drawSpiralVortex(
+    bands: FloatArray,
+    spiralPath: Path,
+    polyX: FloatArray,
+    polyY: FloatArray,
+    bassEnergy: Float,
+    punch: Float,
+    palette: VisualizerPalette,
+    config: VisualizerConfig,
+    timeSec: Float,
+    center: Offset,
+    centerRingRatio: Float,
+    explicitCenterRadiusPx: Float?,
+    spread: Float,
+    thickness: Float,
+    spinSpeed: Float,
+    glowBlend: BlendMode
+) {
+    val count = bands.size
+    if (count < 4) return
+
+    val pxDensity = density
+    val minDim = min(size.width, size.height)
+    val startR = if (explicitCenterRadiusPx != null) {
+        explicitCenterRadiusPx * (1f + (punch * 0.145f).coerceIn(0f, 0.22f)) + 6f * pxDensity
+    } else {
+        minDim * centerRingRatio.coerceIn(0.10f, 0.22f) * 0.55f
+    }
+    val maxR = minDim * (0.46f * spread.coerceIn(0.65f, 1.35f)) + punch * (minDim * 0.04f)
+    val turns = 2.6f
+    val rot = timeSec * 0.55f * spinSpeed
+    val ampScale = minDim * (0.085f + punch * 0.03f) * spread
+
+    for (i in 0 until count) {
+        val t = i.toFloat() / max(1, count - 1)
+        val angle = rot + t * turns * (2f * PI.toFloat())
+        val baseR = startR + t * (maxR - startR)
+        val disp = bands[i] * ampScale * (0.45f + t * 0.85f)
+        val r = baseR + disp
+        polyX[i] = center.x + cos(angle) * r
+        polyY[i] = center.y + sin(angle) * r
+    }
+
+    if (config.glowEnabled) {
+        val haloR = maxR + 20f * pxDensity
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    palette.glow.copy(alpha = (0.14f + bassEnergy * 0.14f + punch * 0.20f).coerceIn(0f, 0.44f)),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = haloR
+            ),
+            radius = haloR,
+            center = center,
+            blendMode = glowBlend
+        )
+    }
+
+    if (config.fillMode != VisualizerFillMode.NONE) {
+        spiralPath.reset()
+        spiralPath.moveTo(polyX[0], polyY[0])
+        addCatmullRomCurveTo(spiralPath, polyX, polyY, count)
+        val strokeW = (if (config.fillMode == VisualizerFillMode.SOLID) 4.0f else 2.2f) * pxDensity * thickness
+
+        if (config.glowEnabled) {
+            drawPath(
+                path = spiralPath,
+                color = palette.glow.copy(alpha = 0.28f + punch * 0.22f),
+                style = Stroke(width = strokeW * 2.5f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                blendMode = glowBlend
+            )
+        }
+        drawPath(
+            path = spiralPath,
+            brush = Brush.sweepGradient(listOf(palette.start, palette.mid, palette.end, palette.start), center = center),
+            style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawPath(
+            path = spiralPath,
+            color = Color.White.copy(alpha = 0.55f + punch * 0.25f),
+            style = Stroke(width = strokeW * 0.38f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+    }
+
+    // Glowing spiral spectrum nodes + optional twin mirrored arm
+    for (i in 0 until count) {
+        val t = i.toFloat() / max(1, count - 1)
+        val energy = bands[i]
+        val nodeColor = if (t < 0.5f) {
+            lerp(palette.start, palette.mid, t * 2f)
+        } else {
+            lerp(palette.mid, palette.end, (t - 0.5f) * 2f)
+        }
+        val dotR = ((1.8f + energy * 4.4f + punch * 1.6f) * pxDensity * thickness)
+            .coerceAtLeast(1.4f * pxDensity)
+        val pt = Offset(polyX[i], polyY[i])
+        if (config.glowEnabled) {
+            drawCircle(
+                color = nodeColor.copy(alpha = 0.26f + energy * 0.24f),
+                radius = dotR * 2.1f,
+                center = pt,
+                blendMode = glowBlend
+            )
+        }
+        drawCircle(color = nodeColor.copy(alpha = 0.94f), radius = dotR, center = pt)
+        drawCircle(color = Color.White.copy(alpha = 0.70f), radius = dotR * 0.4f, center = pt)
+
+        if (config.mirrorEnabled) {
+            val mirrorPt = Offset(center.x - (pt.x - center.x), center.y - (pt.y - center.y))
+            drawCircle(
+                color = nodeColor.copy(alpha = 0.55f),
+                radius = dotR * 0.8f,
+                center = mirrorPt,
+                blendMode = glowBlend
+            )
         }
     }
 }

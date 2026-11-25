@@ -3,8 +3,11 @@ package com.auraplayer.app.ui.screens.settings
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.AveeScenePreset
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -55,6 +58,15 @@ class SettingsViewModelTest {
         viewModel.setBeatSensitivity(1.4f)
         viewModel.setBassBoost(1.3f)
         viewModel.applyTuningPreset(VisualizerTuningPreset.PUNCHY)
+        viewModel.applyScenePreset(AveeScenePreset.TRAP_NATION)
+        viewModel.setFreqRange(40, 12000)
+        viewModel.setBackgroundMode(BackgroundVisualMode.BLURRED_ALBUM_ART)
+        viewModel.setParticleOverlay(ParticleOverlayStyle.STARFIELD)
+        viewModel.setCameraShakeIntensity(0.8f)
+        viewModel.setRgbSplitIntensity(0.9f)
+        viewModel.setAdditiveBlendEnabled(false)
+        viewModel.setVignetteEnabled(false)
+        viewModel.setSharpBarsEnabled(true)
         viewModel.setSpreadScale(1.3f)
         viewModel.setStrokeThickness(1.4f)
         viewModel.setRotationSpeed(1.7f)
@@ -85,6 +97,15 @@ class SettingsViewModelTest {
         coVerify { preferences.updateBeatSensitivity(1.4f) }
         coVerify { preferences.updateBassBoost(1.3f) }
         coVerify { preferences.applyTuningPreset(VisualizerTuningPreset.PUNCHY) }
+        coVerify { preferences.applyScenePreset(AveeScenePreset.TRAP_NATION) }
+        coVerify { preferences.updateFreqRange(40, 12000) }
+        coVerify { preferences.updateBackgroundMode(BackgroundVisualMode.BLURRED_ALBUM_ART) }
+        coVerify { preferences.updateParticleOverlay(ParticleOverlayStyle.STARFIELD) }
+        coVerify { preferences.updateCameraShakeIntensity(0.8f) }
+        coVerify { preferences.updateRgbSplitIntensity(0.9f) }
+        coVerify { preferences.updateAdditiveBlendEnabled(false) }
+        coVerify { preferences.updateVignetteEnabled(false) }
+        coVerify { preferences.updateSharpBarsEnabled(true) }
         coVerify { preferences.updateSpreadScale(1.3f) }
         coVerify { preferences.updateStrokeThickness(1.4f) }
         coVerify { preferences.updateRotationSpeed(1.7f) }

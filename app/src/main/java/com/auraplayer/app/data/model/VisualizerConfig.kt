@@ -6,7 +6,132 @@ enum class VisualizerStyle(val displayName: String) {
     WAVEFORM("Wave"),
     MIRROR_SPECTRUM("Mirror"),
     PARTICLE_PULSE("Pulse"),
-    FIRE_EMBER("Fire Ember")
+    FIRE_EMBER("Fire Ember"),
+    POLYGON_RING("Polygon"),
+    SPIRAL_VORTEX("Spiral")
+}
+
+enum class BackgroundVisualMode(val displayName: String) {
+    ACCENT_GRADIENT("Gradient"),
+    BLURRED_ALBUM_ART("Blur Cover"),
+    PURE_BLACK("OLED Black")
+}
+
+enum class ParticleOverlayStyle(val displayName: String) {
+    OFF("Off"),
+    BOKEH_RADIAL("Bokeh"),
+    EMBERS("Embers"),
+    STARFIELD("Starfield")
+}
+
+enum class AveeScenePreset(
+    val displayName: String,
+    val style: VisualizerStyle,
+    val emberDirection: EmberDirection,
+    val fillMode: VisualizerFillMode,
+    val colorScheme: VisualizerColorScheme,
+    val backgroundMode: BackgroundVisualMode,
+    val particleOverlay: ParticleOverlayStyle,
+    val tuningPreset: VisualizerTuningPreset,
+    val cameraShakeIntensity: Float,
+    val rgbSplitIntensity: Float,
+    val additiveBlendEnabled: Boolean,
+    val vignetteEnabled: Boolean,
+    val sharpBarsEnabled: Boolean,
+    val glowEnabled: Boolean,
+    val mirrorEnabled: Boolean,
+    val peakCapsEnabled: Boolean
+) {
+    TRAP_NATION(
+        displayName = "Trap Nation",
+        style = VisualizerStyle.CIRCULAR_AURA,
+        emberDirection = EmberDirection.UP,
+        fillMode = VisualizerFillMode.SOLID,
+        colorScheme = VisualizerColorScheme.DYNAMIC,
+        backgroundMode = BackgroundVisualMode.BLURRED_ALBUM_ART,
+        particleOverlay = ParticleOverlayStyle.EMBERS,
+        tuningPreset = VisualizerTuningPreset.PUNCHY,
+        cameraShakeIntensity = 0.75f,
+        rgbSplitIntensity = 0.25f,
+        additiveBlendEnabled = true,
+        vignetteEnabled = true,
+        sharpBarsEnabled = false,
+        glowEnabled = true,
+        mirrorEnabled = false,
+        peakCapsEnabled = false
+    ),
+    NCS_HALO(
+        displayName = "NCS Halo",
+        style = VisualizerStyle.CIRCULAR_AURA,
+        emberDirection = EmberDirection.RADIAL,
+        fillMode = VisualizerFillMode.LINE,
+        colorScheme = VisualizerColorScheme.AURORA,
+        backgroundMode = BackgroundVisualMode.BLURRED_ALBUM_ART,
+        particleOverlay = ParticleOverlayStyle.BOKEH_RADIAL,
+        tuningPreset = VisualizerTuningPreset.BALANCED,
+        cameraShakeIntensity = 0.25f,
+        rgbSplitIntensity = 0.0f,
+        additiveBlendEnabled = true,
+        vignetteEnabled = true,
+        sharpBarsEnabled = false,
+        glowEnabled = true,
+        mirrorEnabled = false,
+        peakCapsEnabled = true
+    ),
+    PHONK_GLITCH(
+        displayName = "Phonk RGB",
+        style = VisualizerStyle.MIRROR_SPECTRUM,
+        emberDirection = EmberDirection.RADIAL,
+        fillMode = VisualizerFillMode.LINE,
+        colorScheme = VisualizerColorScheme.SOLAR_FLARE,
+        backgroundMode = BackgroundVisualMode.PURE_BLACK,
+        particleOverlay = ParticleOverlayStyle.STARFIELD,
+        tuningPreset = VisualizerTuningPreset.HYPER,
+        cameraShakeIntensity = 1.05f,
+        rgbSplitIntensity = 1.0f,
+        additiveBlendEnabled = true,
+        vignetteEnabled = true,
+        sharpBarsEnabled = true,
+        glowEnabled = true,
+        mirrorEnabled = true,
+        peakCapsEnabled = true
+    ),
+    LOFI_CHILL(
+        displayName = "Lo-Fi Wave",
+        style = VisualizerStyle.WAVEFORM,
+        emberDirection = EmberDirection.UP,
+        fillMode = VisualizerFillMode.LINE,
+        colorScheme = VisualizerColorScheme.MONOCHROME_GOLD,
+        backgroundMode = BackgroundVisualMode.BLURRED_ALBUM_ART,
+        particleOverlay = ParticleOverlayStyle.EMBERS,
+        tuningPreset = VisualizerTuningPreset.CHILL,
+        cameraShakeIntensity = 0.0f,
+        rgbSplitIntensity = 0.0f,
+        additiveBlendEnabled = true,
+        vignetteEnabled = true,
+        sharpBarsEnabled = false,
+        glowEnabled = true,
+        mirrorEnabled = true,
+        peakCapsEnabled = false
+    ),
+    INFERNO_STAGE(
+        displayName = "Inferno",
+        style = VisualizerStyle.FIRE_EMBER,
+        emberDirection = EmberDirection.UP,
+        fillMode = VisualizerFillMode.LINE,
+        colorScheme = VisualizerColorScheme.EMBER,
+        backgroundMode = BackgroundVisualMode.PURE_BLACK,
+        particleOverlay = ParticleOverlayStyle.OFF,
+        tuningPreset = VisualizerTuningPreset.PUNCHY,
+        cameraShakeIntensity = 0.45f,
+        rgbSplitIntensity = 0.20f,
+        additiveBlendEnabled = true,
+        vignetteEnabled = true,
+        sharpBarsEnabled = false,
+        glowEnabled = true,
+        mirrorEnabled = false,
+        peakCapsEnabled = false
+    )
 }
 
 enum class EmberDirection(val displayName: String) {
@@ -126,10 +251,19 @@ data class VisualizerConfig(
     val beatPunch: Float = 1.0f,
     val beatSensitivity: Float = 1.0f,
     val bassBoost: Float = 1.0f,
+    val freqMinHz: Int = 30,
+    val freqMaxHz: Int = 16000,
     val spreadScale: Float = 1.0f,
     val strokeThickness: Float = 1.0f,
     val rotationSpeed: Float = 1.0f,
     val syncOffsetMs: Int = 0,
+    val backgroundMode: BackgroundVisualMode = BackgroundVisualMode.ACCENT_GRADIENT,
+    val particleOverlay: ParticleOverlayStyle = ParticleOverlayStyle.BOKEH_RADIAL,
+    val cameraShakeIntensity: Float = 0f,
+    val rgbSplitIntensity: Float = 0f,
+    val additiveBlendEnabled: Boolean = true,
+    val vignetteEnabled: Boolean = true,
+    val sharpBarsEnabled: Boolean = false,
     val glowEnabled: Boolean = true,
     val particlesEnabled: Boolean = true,
     val mirrorEnabled: Boolean = false,
@@ -149,5 +283,16 @@ data class VisualizerConfig(
             kotlin.math.abs(beatPunch - preset.beatPunch) < 0.03f &&
             kotlin.math.abs(beatSensitivity - preset.beatSensitivity) < 0.03f &&
             kotlin.math.abs(bassBoost - preset.bassBoost) < 0.03f
+    }
+
+    fun matchingScenePreset(): AveeScenePreset? = AveeScenePreset.entries.firstOrNull { preset ->
+        style == preset.style &&
+            fillMode == preset.fillMode &&
+            colorScheme == preset.colorScheme &&
+            backgroundMode == preset.backgroundMode &&
+            particleOverlay == preset.particleOverlay &&
+            kotlin.math.abs(cameraShakeIntensity - preset.cameraShakeIntensity) < 0.05f &&
+            kotlin.math.abs(rgbSplitIntensity - preset.rgbSplitIntensity) < 0.05f &&
+            sharpBarsEnabled == preset.sharpBarsEnabled
     }
 }

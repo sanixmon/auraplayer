@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
+import com.auraplayer.app.data.model.AveeScenePreset
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
@@ -86,6 +87,10 @@ class NowPlayingViewModel(
 
     fun applyTuningPreset(preset: VisualizerTuningPreset) {
         viewModelScope.launch { visualizerPreferences.applyTuningPreset(preset) }
+    }
+
+    fun applyScenePreset(preset: AveeScenePreset) {
+        viewModelScope.launch { visualizerPreferences.applyScenePreset(preset) }
     }
 
     fun selectCoverArtStyle(style: CoverArtStyle) {

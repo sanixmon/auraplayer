@@ -8,8 +8,11 @@ import com.auraplayer.app.BuildConfig
 import com.auraplayer.app.data.local.prefs.VisualizerPreferencesDataSource
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.AveeScenePreset
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.Track
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
@@ -128,6 +131,42 @@ class SettingsViewModel(
 
     fun applyTuningPreset(preset: VisualizerTuningPreset) {
         viewModelScope.launch { preferences.applyTuningPreset(preset) }
+    }
+
+    fun applyScenePreset(preset: AveeScenePreset) {
+        viewModelScope.launch { preferences.applyScenePreset(preset) }
+    }
+
+    fun setFreqRange(minHz: Int, maxHz: Int) {
+        viewModelScope.launch { preferences.updateFreqRange(minHz, maxHz) }
+    }
+
+    fun setBackgroundMode(mode: BackgroundVisualMode) {
+        viewModelScope.launch { preferences.updateBackgroundMode(mode) }
+    }
+
+    fun setParticleOverlay(style: ParticleOverlayStyle) {
+        viewModelScope.launch { preferences.updateParticleOverlay(style) }
+    }
+
+    fun setCameraShakeIntensity(intensity: Float) {
+        viewModelScope.launch { preferences.updateCameraShakeIntensity(intensity) }
+    }
+
+    fun setRgbSplitIntensity(intensity: Float) {
+        viewModelScope.launch { preferences.updateRgbSplitIntensity(intensity) }
+    }
+
+    fun setAdditiveBlendEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updateAdditiveBlendEnabled(enabled) }
+    }
+
+    fun setVignetteEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updateVignetteEnabled(enabled) }
+    }
+
+    fun setSharpBarsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.updateSharpBarsEnabled(enabled) }
     }
 
     fun setSpreadScale(value: Float) {

@@ -24,7 +24,9 @@ class VisualizerAudioProcessor(
     ),
     private val bandCountProvider: () -> Int = { visualizerBus.targetBandCount },
     private val beatSensitivityProvider: () -> Float = { visualizerBus.beatSensitivity },
-    private val bassBoostProvider: () -> Float = { visualizerBus.bassBoost }
+    private val bassBoostProvider: () -> Float = { visualizerBus.bassBoost },
+    private val freqMinHzProvider: () -> Int = { visualizerBus.freqMinHz },
+    private val freqMaxHzProvider: () -> Int = { visualizerBus.freqMaxHz }
 ) : BaseAudioProcessor() {
 
     private val ringBuffer = FloatArray(FFT_SIZE)
@@ -285,7 +287,9 @@ class VisualizerAudioProcessor(
                                 sampleRateHz = rate,
                                 timestampMs = ts,
                                 beatSensitivity = beatSensitivityProvider(),
-                                bassBoost = bassBoostProvider()
+                                bassBoost = bassBoostProvider(),
+                                minHz = freqMinHzProvider(),
+                                maxHz = freqMaxHzProvider()
                             )
                             visualizerBus.publish(frame)
                         }

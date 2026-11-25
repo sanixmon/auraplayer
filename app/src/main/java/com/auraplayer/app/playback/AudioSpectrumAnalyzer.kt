@@ -71,6 +71,8 @@ class AudioSpectrumAnalyzer(
     private val bandTiltDb = FloatArray(MAX_BANDS)
     private var cachedPlanBandCount = -1
     private var cachedPlanSampleRate = -1
+    private var cachedPlanMinHz = -1
+    private var cachedPlanMaxHz = -1
 
     private val fluxHistory = FloatArray(FLUX_WINDOW_SIZE)
     private var fluxWriteIdx = 0
@@ -103,7 +105,9 @@ class AudioSpectrumAnalyzer(
         sampleRateHz: Int = 44100,
         timestampMs: Long = 0L,
         beatSensitivity: Float = 1.0f,
-        bassBoost: Float = 1.0f
+        bassBoost: Float = 1.0f,
+        minHz: Int = 30,
+        maxHz: Int = 16000
     ): VisualizerFrame {
         if (sampleCount <= 0 || monoSamples.isEmpty()) {
             return VisualizerFrame.EMPTY
@@ -182,7 +186,12 @@ class AudioSpectrumAnalyzer(
             outMag = detailMag
         )
 
-        ensureBandPlan(safeBandCount, safeRate)
+        ensureBandPlan(
+            bandCount = safeBandCount,
+            sampleRateHz = safeRate,
+            minHzInt = minHz,
+            maxHzInt = maxHz
+        )
 
         val bassBinRes = safeRate.toDouble() / bassFftSize
         val detailBinRes = safeRate.toDouble() / detailFftSize
@@ -355,11 +364,24 @@ class AudioSpectrumAnalyzer(
         }
     }
 
-    private fun ensureBandPlan(bandCount: Int, sampleRateHz: Int) {
-        if (cachedPlanBandCount == bandCount && cachedPlanSampleRate == sampleRateHz) return
+    private fun ensureBandPlan(
+        bandCount: Int,
+        sampleRateHz: Int,
+        minHzInt: Int = 30,
+        maxHzInt: Int = 16000
+    ) {
+        val safeMinInt = minHzInt.coerceIn(20, 500)
+        val safeMaxInt = maxHzInt.coerceIn(max(1000, safeMinInt + 500), 16000)
+        if (cachedPlanBandCount == bandCount &&
+            cachedPlanSampleRate == sampleRateHz &&
+            cachedPlanMinHz == safeMinInt &&
+            cachedPlanMaxHz == safeMaxInt
+        ) {
+            return
+        }
 
-        val minHz = 30.0
-        val maxHz = min(16000.0, sampleRateHz * 0.48)
+        val minHz = safeMinInt.toDouble()
+        val maxHz = min(safeMaxInt.toDouble(), sampleRateHz * 0.48).coerceAtLeast(minHz + 100.0)
         val ratio = maxHz / minHz
         val ln2Inv = 1.0 / ln(2.0)
 
@@ -380,6 +402,8 @@ class AudioSpectrumAnalyzer(
 
         cachedPlanBandCount = bandCount
         cachedPlanSampleRate = sampleRateHz
+        cachedPlanMinHz = safeMinInt
+        cachedPlanMaxHz = safeMaxInt
     }
 
     private fun sampleFractionalBandAmplitude(

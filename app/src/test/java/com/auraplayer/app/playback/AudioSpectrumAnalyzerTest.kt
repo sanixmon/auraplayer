@@ -141,4 +141,40 @@ class AudioSpectrumAnalyzerTest {
             boosted.bassEnergy > flat.bassEnergy
         )
     }
+
+    @Test
+    fun `custom frequency window focuses spectrum bands within requested Hz range`() {
+        val sampleRate = 44100
+        val highTone = FloatArray(4096) { i ->
+            (0.8 * sin(2.0 * PI * 6000.0 * i / sampleRate)).toFloat()
+        }
+        val fullAnalyzer = AudioSpectrumAnalyzer(bassFftSize = 4096, detailFftSize = 1024)
+        val bassWindowAnalyzer = AudioSpectrumAnalyzer(bassFftSize = 4096, detailFftSize = 1024)
+
+        val fullFrame = fullAnalyzer.analyze(
+            highTone,
+            bandCount = 48,
+            sampleRateHz = sampleRate,
+            timestampMs = 100L,
+            minHz = 30,
+            maxHz = 16000
+        )
+        val bassOnlyFrame = bassWindowAnalyzer.analyze(
+            highTone,
+            bandCount = 48,
+            sampleRateHz = sampleRate,
+            timestampMs = 100L,
+            minHz = 30,
+            maxHz = 1000
+        )
+
+        assertTrue(
+            "Expected full spectrum to detect 6kHz tone (${fullFrame.spectrumBands.max()})",
+            fullFrame.spectrumBands.max() > 0.7f
+        )
+        assertTrue(
+            "Expected 30-1000Hz window to ignore 6kHz tone (${bassOnlyFrame.spectrumBands.max()})",
+            bassOnlyFrame.spectrumBands.max() < 0.25f
+        )
+    }
 }

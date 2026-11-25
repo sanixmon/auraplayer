@@ -101,6 +101,8 @@ fun AuraAppRoot(
     appContainer.visualizerBus.targetBandCount = visualizerConfig.density.bandCount
     appContainer.visualizerBus.beatSensitivity = visualizerConfig.beatSensitivity
     appContainer.visualizerBus.bassBoost = visualizerConfig.bassBoost
+    appContainer.visualizerBus.freqMinHz = visualizerConfig.freqMinHz
+    appContainer.visualizerBus.freqMaxHz = visualizerConfig.freqMaxHz
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val useNavRail = widthSizeClass != WindowWidthSizeClass.Compact

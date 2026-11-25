@@ -1,6 +1,8 @@
 package com.auraplayer.app.data.backup
 
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.EmberDirection
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -49,10 +51,21 @@ data class BackupVisualizerConfig(
     val beatPunch: Float? = null,
     val beatSensitivity: Float? = null,
     val bassBoost: Float? = null,
-    val syncOffsetMs: Int? = null
+    val syncOffsetMs: Int? = null,
+    val freqMinHz: Int? = null,
+    val freqMaxHz: Int? = null,
+    val backgroundMode: String? = null,
+    val particleOverlay: String? = null,
+    val cameraShakeIntensity: Float? = null,
+    val rgbSplitIntensity: Float? = null,
+    val additiveBlendEnabled: Boolean? = null,
+    val vignetteEnabled: Boolean? = null,
+    val sharpBarsEnabled: Boolean? = null
 ) {
     fun toDomain(): VisualizerConfig {
         val defaults = VisualizerConfig()
+        val safeMinHz = (freqMinHz ?: defaults.freqMinHz).coerceIn(20, 500)
+        val safeMaxHz = (freqMaxHz ?: defaults.freqMaxHz).coerceIn(maxOf(1000, safeMinHz + 500), 16000)
         return VisualizerConfig(
             style = VisualizerStyle.entries.firstOrNull { it.name == style } ?: VisualizerStyle.BARS,
             emberDirection = emberDirection?.let { name ->
@@ -67,7 +80,20 @@ data class BackupVisualizerConfig(
             beatPunch = (beatPunch ?: defaults.beatPunch).coerceIn(0f, 2.0f),
             beatSensitivity = (beatSensitivity ?: defaults.beatSensitivity).coerceIn(0.5f, 2.0f),
             bassBoost = (bassBoost ?: defaults.bassBoost).coerceIn(0.5f, 2.0f),
+            freqMinHz = safeMinHz,
+            freqMaxHz = safeMaxHz,
             syncOffsetMs = (syncOffsetMs ?: defaults.syncOffsetMs).coerceIn(-100, 350),
+            backgroundMode = backgroundMode?.let { name ->
+                BackgroundVisualMode.entries.firstOrNull { it.name == name }
+            } ?: defaults.backgroundMode,
+            particleOverlay = particleOverlay?.let { name ->
+                ParticleOverlayStyle.entries.firstOrNull { it.name == name }
+            } ?: defaults.particleOverlay,
+            cameraShakeIntensity = (cameraShakeIntensity ?: defaults.cameraShakeIntensity).coerceIn(0f, 1.5f),
+            rgbSplitIntensity = (rgbSplitIntensity ?: defaults.rgbSplitIntensity).coerceIn(0f, 1.5f),
+            additiveBlendEnabled = additiveBlendEnabled ?: defaults.additiveBlendEnabled,
+            vignetteEnabled = vignetteEnabled ?: defaults.vignetteEnabled,
+            sharpBarsEnabled = sharpBarsEnabled ?: defaults.sharpBarsEnabled,
             glowEnabled = glowEnabled,
             mirrorEnabled = mirrorEnabled,
             peakCapsEnabled = peakCapsEnabled,
@@ -92,7 +118,16 @@ data class BackupVisualizerConfig(
             beatPunch = config.beatPunch,
             beatSensitivity = config.beatSensitivity,
             bassBoost = config.bassBoost,
-            syncOffsetMs = config.syncOffsetMs
+            syncOffsetMs = config.syncOffsetMs,
+            freqMinHz = config.freqMinHz,
+            freqMaxHz = config.freqMaxHz,
+            backgroundMode = config.backgroundMode.name,
+            particleOverlay = config.particleOverlay.name,
+            cameraShakeIntensity = config.cameraShakeIntensity,
+            rgbSplitIntensity = config.rgbSplitIntensity,
+            additiveBlendEnabled = config.additiveBlendEnabled,
+            vignetteEnabled = config.vignetteEnabled,
+            sharpBarsEnabled = config.sharpBarsEnabled
         )
     }
 }

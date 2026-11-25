@@ -12,9 +12,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.auraplayer.app.data.model.AppAccentMode
 import com.auraplayer.app.data.model.AppAccentPreset
+import com.auraplayer.app.data.model.AveeScenePreset
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
+import com.auraplayer.app.data.model.ParticleOverlayStyle
 import com.auraplayer.app.data.model.VisualizerColorScheme
 import com.auraplayer.app.data.model.VisualizerConfig
 import com.auraplayer.app.data.model.VisualizerDensity
@@ -41,10 +44,19 @@ class VisualizerPreferencesDataSource(private val context: Context) {
         val BEAT_PUNCH = floatPreferencesKey("visualizer_beat_punch")
         val BEAT_SENSITIVITY = floatPreferencesKey("visualizer_beat_sensitivity")
         val BASS_BOOST = floatPreferencesKey("visualizer_bass_boost")
+        val FREQ_MIN_HZ = intPreferencesKey("visualizer_freq_min_hz")
+        val FREQ_MAX_HZ = intPreferencesKey("visualizer_freq_max_hz")
         val SPREAD_SCALE = floatPreferencesKey("visualizer_spread_scale")
         val STROKE_THICKNESS = floatPreferencesKey("visualizer_stroke_thickness")
         val ROTATION_SPEED = floatPreferencesKey("visualizer_rotation_speed")
         val SYNC_OFFSET_MS = intPreferencesKey("visualizer_sync_offset_ms")
+        val BACKGROUND_MODE = stringPreferencesKey("visualizer_background_mode")
+        val PARTICLE_OVERLAY = stringPreferencesKey("visualizer_particle_overlay")
+        val CAMERA_SHAKE = floatPreferencesKey("visualizer_camera_shake")
+        val RGB_SPLIT = floatPreferencesKey("visualizer_rgb_split")
+        val ADDITIVE_BLEND = booleanPreferencesKey("visualizer_additive_blend")
+        val VIGNETTE_ENABLED = booleanPreferencesKey("visualizer_vignette_enabled")
+        val SHARP_BARS = booleanPreferencesKey("visualizer_sharp_bars")
         val GLOW_ENABLED = booleanPreferencesKey("visualizer_glow_enabled")
         val PARTICLES_ENABLED = booleanPreferencesKey("visualizer_particles_enabled")
         val MIRROR_ENABLED = booleanPreferencesKey("visualizer_mirror_enabled")
@@ -86,12 +98,27 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             beatPunch = (prefs[Keys.BEAT_PUNCH] ?: defaults.beatPunch).coerceIn(0f, 2.0f),
             beatSensitivity = (prefs[Keys.BEAT_SENSITIVITY] ?: defaults.beatSensitivity).coerceIn(0.5f, 2.0f),
             bassBoost = (prefs[Keys.BASS_BOOST] ?: defaults.bassBoost).coerceIn(0.5f, 2.0f),
+            freqMinHz = (prefs[Keys.FREQ_MIN_HZ] ?: defaults.freqMinHz).coerceIn(20, 500),
+            freqMaxHz = (prefs[Keys.FREQ_MAX_HZ] ?: defaults.freqMaxHz).coerceIn(1000, 16000),
             spreadScale = (prefs[Keys.SPREAD_SCALE] ?: defaults.spreadScale).coerceIn(0.5f, 1.5f),
             strokeThickness = (prefs[Keys.STROKE_THICKNESS] ?: defaults.strokeThickness)
                 .coerceIn(0.6f, 1.8f),
             rotationSpeed = (prefs[Keys.ROTATION_SPEED] ?: defaults.rotationSpeed)
                 .coerceIn(0f, 2.5f),
             syncOffsetMs = (prefs[Keys.SYNC_OFFSET_MS] ?: defaults.syncOffsetMs).coerceIn(-100, 350),
+            backgroundMode = prefs[Keys.BACKGROUND_MODE]?.let { name ->
+                BackgroundVisualMode.entries.firstOrNull { it.name == name }
+            } ?: defaults.backgroundMode,
+            particleOverlay = prefs[Keys.PARTICLE_OVERLAY]?.let { name ->
+                ParticleOverlayStyle.entries.firstOrNull { it.name == name }
+            } ?: defaults.particleOverlay,
+            cameraShakeIntensity = (prefs[Keys.CAMERA_SHAKE] ?: defaults.cameraShakeIntensity)
+                .coerceIn(0f, 1.5f),
+            rgbSplitIntensity = (prefs[Keys.RGB_SPLIT] ?: defaults.rgbSplitIntensity)
+                .coerceIn(0f, 1.5f),
+            additiveBlendEnabled = prefs[Keys.ADDITIVE_BLEND] ?: defaults.additiveBlendEnabled,
+            vignetteEnabled = prefs[Keys.VIGNETTE_ENABLED] ?: defaults.vignetteEnabled,
+            sharpBarsEnabled = prefs[Keys.SHARP_BARS] ?: defaults.sharpBarsEnabled,
             glowEnabled = prefs[Keys.GLOW_ENABLED] ?: defaults.glowEnabled,
             particlesEnabled = prefs[Keys.PARTICLES_ENABLED] ?: defaults.particlesEnabled,
             mirrorEnabled = prefs[Keys.MIRROR_ENABLED] ?: defaults.mirrorEnabled,
@@ -141,6 +168,71 @@ class VisualizerPreferencesDataSource(private val context: Context) {
 
     suspend fun updateBassBoost(boost: Float) {
         context.visualizerDataStore.edit { it[Keys.BASS_BOOST] = boost.coerceIn(0.5f, 2.0f) }
+    }
+
+    suspend fun updateFreqRange(minHz: Int, maxHz: Int) {
+        val safeMin = minHz.coerceIn(20, 500)
+        val safeMax = maxHz.coerceIn(maxOf(1000, safeMin + 500), 16000)
+        context.visualizerDataStore.edit {
+            it[Keys.FREQ_MIN_HZ] = safeMin
+            it[Keys.FREQ_MAX_HZ] = safeMax
+        }
+    }
+
+    suspend fun updateBackgroundMode(mode: BackgroundVisualMode) {
+        context.visualizerDataStore.edit { it[Keys.BACKGROUND_MODE] = mode.name }
+    }
+
+    suspend fun updateParticleOverlay(style: ParticleOverlayStyle) {
+        context.visualizerDataStore.edit {
+            it[Keys.PARTICLE_OVERLAY] = style.name
+            it[Keys.PARTICLES_ENABLED] = style != ParticleOverlayStyle.OFF
+        }
+    }
+
+    suspend fun updateCameraShakeIntensity(intensity: Float) {
+        context.visualizerDataStore.edit { it[Keys.CAMERA_SHAKE] = intensity.coerceIn(0f, 1.5f) }
+    }
+
+    suspend fun updateRgbSplitIntensity(intensity: Float) {
+        context.visualizerDataStore.edit { it[Keys.RGB_SPLIT] = intensity.coerceIn(0f, 1.5f) }
+    }
+
+    suspend fun updateAdditiveBlendEnabled(enabled: Boolean) {
+        context.visualizerDataStore.edit { it[Keys.ADDITIVE_BLEND] = enabled }
+    }
+
+    suspend fun updateVignetteEnabled(enabled: Boolean) {
+        context.visualizerDataStore.edit { it[Keys.VIGNETTE_ENABLED] = enabled }
+    }
+
+    suspend fun updateSharpBarsEnabled(enabled: Boolean) {
+        context.visualizerDataStore.edit { it[Keys.SHARP_BARS] = enabled }
+    }
+
+    suspend fun applyScenePreset(preset: AveeScenePreset) {
+        context.visualizerDataStore.edit {
+            it[Keys.STYLE] = preset.style.name
+            it[Keys.EMBER_DIRECTION] = preset.emberDirection.name
+            it[Keys.FILL_MODE] = preset.fillMode.name
+            it[Keys.COLOR_SCHEME] = preset.colorScheme.name
+            it[Keys.BACKGROUND_MODE] = preset.backgroundMode.name
+            it[Keys.PARTICLE_OVERLAY] = preset.particleOverlay.name
+            it[Keys.PARTICLES_ENABLED] = preset.particleOverlay != ParticleOverlayStyle.OFF
+            it[Keys.SENSITIVITY] = preset.tuningPreset.sensitivity
+            it[Keys.SMOOTHING] = preset.tuningPreset.smoothing
+            it[Keys.BEAT_PUNCH] = preset.tuningPreset.beatPunch
+            it[Keys.BEAT_SENSITIVITY] = preset.tuningPreset.beatSensitivity
+            it[Keys.BASS_BOOST] = preset.tuningPreset.bassBoost
+            it[Keys.CAMERA_SHAKE] = preset.cameraShakeIntensity
+            it[Keys.RGB_SPLIT] = preset.rgbSplitIntensity
+            it[Keys.ADDITIVE_BLEND] = preset.additiveBlendEnabled
+            it[Keys.VIGNETTE_ENABLED] = preset.vignetteEnabled
+            it[Keys.SHARP_BARS] = preset.sharpBarsEnabled
+            it[Keys.GLOW_ENABLED] = preset.glowEnabled
+            it[Keys.MIRROR_ENABLED] = preset.mirrorEnabled
+            it[Keys.PEAK_CAPS_ENABLED] = preset.peakCapsEnabled
+        }
     }
 
     suspend fun applyTuningPreset(preset: VisualizerTuningPreset) {
@@ -243,6 +335,8 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             it.remove(Keys.CUSTOM_APP_PRIMARY)
             it.remove(Keys.CUSTOM_APP_SECONDARY)
             it.remove(Keys.COVER_ART_STYLE)
+            it.remove(Keys.BACKGROUND_MODE)
+            it.remove(Keys.VIGNETTE_ENABLED)
         }
     }
 
@@ -253,6 +347,7 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             it.remove(Keys.FILL_MODE)
             it.remove(Keys.COLOR_SCHEME)
             it.remove(Keys.DENSITY)
+            it.remove(Keys.PARTICLE_OVERLAY)
             it.remove(Keys.CUSTOM_VIZ_PRIMARY)
             it.remove(Keys.CUSTOM_VIZ_SECONDARY)
         }
@@ -265,6 +360,8 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             it.remove(Keys.BEAT_PUNCH)
             it.remove(Keys.BEAT_SENSITIVITY)
             it.remove(Keys.BASS_BOOST)
+            it.remove(Keys.FREQ_MIN_HZ)
+            it.remove(Keys.FREQ_MAX_HZ)
             it.remove(Keys.SYNC_OFFSET_MS)
         }
     }
@@ -274,6 +371,10 @@ class VisualizerPreferencesDataSource(private val context: Context) {
             it.remove(Keys.SPREAD_SCALE)
             it.remove(Keys.STROKE_THICKNESS)
             it.remove(Keys.ROTATION_SPEED)
+            it.remove(Keys.CAMERA_SHAKE)
+            it.remove(Keys.RGB_SPLIT)
+            it.remove(Keys.ADDITIVE_BLEND)
+            it.remove(Keys.SHARP_BARS)
             it.remove(Keys.GLOW_ENABLED)
             it.remove(Keys.PARTICLES_ENABLED)
             it.remove(Keys.MIRROR_ENABLED)

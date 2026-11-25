@@ -2,6 +2,19 @@
 
 All notable changes to **Aura Player** are documented in this file.
 
+## [1.4.0] - 2026-11-25
+
+### Added
+- Avee-inspired Scene Presets (Trap Nation, NCS Halo, Phonk RGB, Lo-Fi Wave, Inferno) available in both Settings and the Now Playing Look sheet.
+- Blurred Album Art reactive background with bass-driven breathing zoom, OLED Black background mode, and Cinematic Vignette.
+- Beat Camera Shake and GPU RGB Split (Chromatic Aberration via Android 13+ AGSL RuntimeShader) post-processing effects.
+- Decoupled Ambient Particle Overlays (Bokeh, Embers, Starfield) layerable behind any visualizer, plus Additive Blend (`BlendMode.Plus`) glow and Sharp Bars vs Soft Bars styling.
+- Two new Avee-style spectrum paths: Polygon Ring (`SidedPolygon`) and Spiral Vortex (`Spiral`).
+- Configurable Frequency Window (`Lower Hz` and `Higher Hz`) in Beat & Audio Tuning.
+
+### Changed
+- Extended Aura Backup schema (backward-compatible with v1) to preserve Avee scene, post-FX, and frequency window settings.
+
 ## [1.3.0] - 2026-11-25
 
 ### Added

@@ -25,6 +25,12 @@ class VisualizerBus {
     @Volatile
     var bassBoost: Float = 1.0f
 
+    @Volatile
+    var freqMinHz: Int = 30
+
+    @Volatile
+    var freqMaxHz: Int = 16000
+
     private val lock = Any()
     private val history = Array<VisualizerFrame?>(HISTORY_CAPACITY) { null }
     private var writePos = 0

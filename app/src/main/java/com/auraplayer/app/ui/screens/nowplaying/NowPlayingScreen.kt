@@ -107,6 +107,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.auraplayer.app.data.model.AveeScenePreset
+import com.auraplayer.app.data.model.BackgroundVisualMode
 import com.auraplayer.app.data.model.CoverArtStyle
 import com.auraplayer.app.data.model.EmberDirection
 import com.auraplayer.app.data.model.NowPlayingVisualMode
@@ -115,10 +117,13 @@ import com.auraplayer.app.data.model.VisualizerFillMode
 import com.auraplayer.app.data.model.VisualizerStyle
 import com.auraplayer.app.data.model.VisualizerTuningPreset
 import com.auraplayer.app.playback.RepeatMode
+import com.auraplayer.app.ui.components.AveeBackgroundLayer
+import com.auraplayer.app.ui.components.AveeStagePostFxBox
 import com.auraplayer.app.ui.components.CoverArtView
 import com.auraplayer.app.ui.components.DualColorWheelDialog
 import com.auraplayer.app.ui.components.TrackListItem
 import com.auraplayer.app.ui.components.VisualizerCanvas
+import com.auraplayer.app.ui.components.rememberBeatPunchState
 import com.auraplayer.app.ui.components.toPalette
 import com.auraplayer.app.ui.theme.LocalAlbumAccentColors
 import com.auraplayer.app.ui.util.formatDurationMs
@@ -279,6 +284,22 @@ fun NowPlayingScreen(
         label = "scrim_bottom_alpha"
     )
 
+    val hasVisualizerVisible = visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER ||
+        visualizerConfig.visualMode == NowPlayingVisualMode.VISUALIZER_ONLY
+    val needsPostFxLoop = playbackState.isPlaying && (
+        visualizerConfig.cameraShakeIntensity > 0.01f ||
+            visualizerConfig.rgbSplitIntensity > 0.01f ||
+            visualizerConfig.backgroundMode == BackgroundVisualMode.BLURRED_ALBUM_ART
+        )
+    val (postFxPunch, postFxTimeSec) = rememberBeatPunchState(
+        frame = visualizerFrame,
+        config = visualizerConfig,
+        isPlaying = playbackState.isPlaying,
+        demoWhenIdle = false,
+        visualizerBus = viewModel.visualizerBus,
+        enabled = needsPostFxLoop
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -296,39 +317,44 @@ fun NowPlayingScreen(
                     }
                 }
             }
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        accent.copy(alpha = 0.16f),
-                        secondary.copy(alpha = 0.08f),
-                        bgColor
-                    )
-                )
-            )
     ) {
-        // Full-bleed unclipped background Visualizer aligned pixel-exact with stage center
-        if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER ||
-            visualizerConfig.visualMode == NowPlayingVisualMode.VISUALIZER_ONLY
-        ) {
-            VisualizerCanvas(
-                frame = visualizerFrame,
+        // Avee-inspired Background (Gradient / Blurred Album Art / OLED Black + Vignette)
+        AveeBackgroundLayer(
+            track = track,
+            config = visualizerConfig,
+            punch = postFxPunch,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Full-bleed unclipped background Visualizer aligned pixel-exact with stage center,
+        // wrapped in Beat Camera Shake & GPU RGB Split Post-FX.
+        if (hasVisualizerVisible) {
+            AveeStagePostFxBox(
                 config = visualizerConfig,
-                isPlaying = playbackState.isPlaying,
-                demoWhenIdle = false,
-                centerRingRadiusRatio = if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
-                    0.26f
-                } else {
-                    0.22f
-                },
-                centerRingRadiusDp = if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
-                    animatedCoverSize / 2f + 8.dp
-                } else {
-                    null
-                },
-                centerOverride = if (stageCenterInitialized) stageCenterAnim.value else null,
-                visualizerBus = viewModel.visualizerBus,
+                punch = postFxPunch,
+                timeSec = postFxTimeSec,
                 modifier = Modifier.fillMaxSize()
-            )
+            ) {
+                VisualizerCanvas(
+                    frame = visualizerFrame,
+                    config = visualizerConfig,
+                    isPlaying = playbackState.isPlaying,
+                    demoWhenIdle = false,
+                    centerRingRadiusRatio = if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
+                        0.26f
+                    } else {
+                        0.22f
+                    },
+                    centerRingRadiusDp = if (visualizerConfig.visualMode == NowPlayingVisualMode.COVER_AND_VISUALIZER) {
+                        animatedCoverSize / 2f + 8.dp
+                    } else {
+                        null
+                    },
+                    centerOverride = if (stageCenterInitialized) stageCenterAnim.value else null,
+                    visualizerBus = viewModel.visualizerBus,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         // Bottom readability scrim (softens smoothly in fullscreen mode)
@@ -754,6 +780,21 @@ fun NowPlayingScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Look", style = MaterialTheme.typography.titleLarge)
+
+                Text("Scene Presets", style = MaterialTheme.typography.titleMedium)
+                val activeScenePreset = visualizerConfig.matchingScenePreset()
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AveeScenePreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = activeScenePreset == preset,
+                            onClick = { viewModel.applyScenePreset(preset) },
+                            label = { Text(preset.displayName) }
+                        )
+                    }
+                }
 
                 Text("Cover Art", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
